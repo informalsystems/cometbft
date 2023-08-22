@@ -324,9 +324,9 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 
 	// Prune old heights, if requested by ABCI app.
 	if retainHeight > 0 && blockExec.pruner != nil {
-		err := blockExec.pruner.SetApplicationRetainHeight(retainHeight)
+		err := blockExec.pruner.SetApplicationBlockRetainHeight(retainHeight)
 		if err != nil {
-			blockExec.logger.Error("Failed to set application retain height", "retainHeight", retainHeight, "err", err)
+			blockExec.logger.Error("Failed to set application block retain height", "retainHeight", retainHeight, "err", err)
 		}
 	}
 

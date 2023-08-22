@@ -47,7 +47,7 @@ perturb = ["disconnect"]
 
 [node.validator02]
 seeds = ["seed01"]
-database = "boltdb"
+database = "goleveldb"
 privval_protocol = "tcp"
 persist_interval = 0
 perturb = ["restart"]
@@ -57,7 +57,8 @@ seeds = ["seed01"]
 database = "badgerdb"
 privval_protocol = "unix"
 persist_interval = 3
-retain_blocks = 20
+retain_blocks = 14
+enable_companion_pruning = true
 perturb = ["kill"]
 key_type = "secp256k1"
 
@@ -70,7 +71,7 @@ key_type = "sr25519"
 [node.validator05]
 start_at = 1005 # Becomes part of the validator set at 1010
 persistent_peers = ["validator01", "full01"]
-database = "cleveldb"
+database = "goleveldb"
 privval_protocol = "tcp"
 perturb = ["kill", "pause", "disconnect", "restart"]
 
@@ -78,7 +79,8 @@ perturb = ["kill", "pause", "disconnect", "restart"]
 start_at = 1010
 mode = "full"
 persistent_peers = ["validator01", "validator02", "validator03", "validator04", "validator05"]
-retain_blocks = 20
+retain_blocks = 14
+enable_companion_pruning = true
 perturb = ["restart"]
 
 [node.full02]
