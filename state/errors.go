@@ -60,6 +60,19 @@ type (
 		Err    error
 		Height int64
 	}
+	ErrPrunerFailedToLoadState struct {
+		Err error
+	}
+
+	ErrFailedToPruneBlocks struct {
+		Height int64
+		Err    error
+	}
+
+	ErrFailedToPruneStates struct {
+		Height int64
+		Err    error
+	}
 )
 
 func (e ErrUnknownBlock) Error() string {
@@ -125,3 +138,32 @@ func (e ErrABCIResponseCorruptedOrSpecChangeForHeight) Unwrap() error {
 }
 
 var ErrFinalizeBlockResponsesNotPersisted = errors.New("node is not persisting finalize block responses")
+
+func (e ErrPrunerFailedToLoadState) Error() string {
+	return fmt.Sprintf("failed to load state, cannot prune: %s", e.Err.Error())
+}
+
+func (e ErrPrunerFailedToLoadState) Unwrap() error {
+	return e.Err
+}
+
+func (e ErrFailedToPruneBlocks) Error() string {
+	return fmt.Sprintf("failed to prune blocks to height %d: %s", e.Height, e.Err.Error())
+}
+
+func (e ErrFailedToPruneBlocks) Unwrap() error {
+	return e.Err
+}
+
+func (e ErrFailedToPruneStates) Error() string {
+	return fmt.Sprintf("failed to prune states to height %d: %s", e.Height, e.Err.Error())
+}
+
+func (e ErrFailedToPruneStates) Unwrap() error {
+	return e.Err
+}
+
+var (
+	ErrPrunerCannotLowerRetainHeight = errors.New("cannot set a height lower than previously requested - heights might have already been pruned")
+	ErrInvalidRetainHeight           = errors.New("retain height cannot be less or equal than 0")
+)
