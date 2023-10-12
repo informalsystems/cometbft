@@ -387,6 +387,8 @@ func NewNodeWithContext(ctx context.Context,
 
 	pruner, err := createPruner(
 		config,
+		txIndexer,
+		blockIndexer,
 		stateStore,
 		blockStore,
 		smMetrics,
@@ -998,6 +1000,8 @@ func makeNodeInfo(
 
 func createPruner(
 	config *cfg.Config,
+	txIndexer txindex.TxIndexer,
+	blockIndexer indexer.BlockIndexer,
 	stateStore sm.Store,
 	blockStore *store.BlockStore,
 	metrics *sm.Metrics,
@@ -1024,7 +1028,7 @@ func createPruner(
 		prunerOpts = append(prunerOpts, sm.WithPrunerCompanionEnabled())
 	}
 
-	return sm.NewPruner(stateStore, blockStore, logger, prunerOpts...), nil
+	return sm.NewPruner(stateStore, blockStore, blockIndexer, txIndexer, logger, prunerOpts...), nil
 }
 
 // Set the initial application retain height to 0 to avoid the data companion
