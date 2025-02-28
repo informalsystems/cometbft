@@ -1,14 +1,14 @@
 # Runs fuzzing nightly.
 name: Fuzz Tests
 on:
-  workflow_dispatch:  # allow running workflow manually
+  workflow_dispatch: # allow running workflow manually
   schedule:
     - cron: '0 3 * * *'
   pull_request:
     branches:
       - v0.38.x
     paths:
-      - "test/fuzz/**/*.go"
+      - 'test/fuzz/**/*.go'
 
 jobs:
   fuzz-nightly-test:
@@ -81,7 +81,7 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
           CRASHERS: ${{ needs.fuzz-nightly-test.outputs.crashers-count }}
-          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook

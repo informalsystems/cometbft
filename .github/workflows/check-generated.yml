@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: '1.22'
 
       - uses: actions/checkout@v4
 
-      - name: "Check generated mocks and metrics"
+      - name: 'Check generated mocks and metrics'
         run: |
           set -euo pipefail
 
@@ -44,13 +44,13 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: '1.22'
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1 # we need a .git directory to run git diff
 
-      - name: "Check protobuf generated code"
+      - name: 'Check protobuf generated code'
         run: |
           set -euo pipefail
 

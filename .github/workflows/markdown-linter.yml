@@ -4,15 +4,15 @@ on:
     branches:
       - v0.38.x
     paths:
-      - "**.md"
-      - "**.yml"
-      - "**.yaml"
+      - '**.md'
+      - '**.yml'
+      - '**.yaml'
   pull_request:
     branches:
       - v0.38.x
     paths:
-      - "**.md"
-      - "**.yml"
+      - '**.md'
+      - '**.yml'
 
 jobs:
   build:

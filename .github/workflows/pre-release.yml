@@ -1,11 +1,11 @@
-name: "Pre-release"
+name: 'Pre-release'
 
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+"  # e.g. v0.37.0-alpha.1, v0.38.0-alpha.10
-      - "v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"   # e.g. v0.37.0-beta.1, v0.38.0-beta.10
-      - "v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+"      # e.g. v0.37.0-rc1, v0.38.0-rc10
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+' # e.g. v0.37.0-alpha.1, v0.38.0-alpha.10
+      - 'v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+' # e.g. v0.37.0-beta.1, v0.38.0-beta.10
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+' # e.g. v0.37.0-rc1, v0.38.0-rc10
 
 jobs:
   prerelease:
@@ -59,7 +59,7 @@ jobs:
       - name: Notify Slack upon pre-release
         uses: slackapi/slack-github-action@v2.0.0
         env:
-          RELEASE_URL: "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          RELEASE_URL: '${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}'
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
