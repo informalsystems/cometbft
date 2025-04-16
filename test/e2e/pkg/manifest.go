@@ -142,6 +142,9 @@ type Manifest struct {
 	// 0 denotes it is set at InitChain.
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
 
+	SBTEnableHeight int64 `toml:"sbt_enable_height"`
+	SBTUpdateHeight int64 `toml:"sbt_update_height"`
+
 	// Genesis is a set of key-value config entries to write to the
 	// produced genesis file. The format is "key = value".
 	// Example: "consensus_params.evidence.max_bytes = 1024".

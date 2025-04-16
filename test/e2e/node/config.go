@@ -50,6 +50,9 @@ type Config struct {
 
 	PbtsEnableHeight int64 `toml:"pbts_enable_height"`
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
+
+	SBTEnableHeight int64 `toml:"sbt_enable_height"`
+	SBTUpdateHeight int64 `toml:"sbt_update_height"`
 }
 
 // App extracts out the application specific configuration parameters.
@@ -72,6 +75,8 @@ func (cfg *Config) App() *app.Config {
 		ABCIRequestsLoggingEnabled: cfg.ABCIRequestsLoggingEnabled,
 		PbtsEnableHeight:           cfg.PbtsEnableHeight,
 		PbtsUpdateHeight:           cfg.PbtsUpdateHeight,
+		SBTEnableHeight:            cfg.SBTEnableHeight,
+		SBTUpdateHeight:            cfg.SBTUpdateHeight,
 	}
 }
 

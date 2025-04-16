@@ -39,6 +39,7 @@ const (
 	suffixChainID       string = "ChainID"
 	suffixVoteExtHeight string = "VoteExtensionsHeight"
 	suffixPbtsHeight    string = "PbtsHeight"
+	suffixSBTHeight     string = "SbtHeight"
 	suffixInitialHeight string = "InitialHeight"
 	txTTL               uint64 = 15 // height difference at which transactions should be invalid
 )
@@ -55,7 +56,8 @@ type Application struct {
 	restoreSnapshot *abci.Snapshot
 	restoreChunks   [][]byte
 	// It's OK not to persist this, as it is not part of the state machine
-	seenTxs sync.Map // cmttypes.TxKey -> uint64
+	seenTxs         sync.Map // cmttypes.TxKey -> uint64
+	blockDelayState *BlockDelayState
 }
 
 // Config allows for the setting of high level parameters for running the e2e Application
@@ -133,6 +135,11 @@ type Config struct {
 	// -1 denotes it is set at genesis.
 	// 0 denotes it is set at InitChain.
 	PbtsUpdateHeight int64 `toml:"pbts_update_height"`
+
+	// SBTEnableHeight configures the first height during which
+	SBTEnableHeight int64 `toml:"sbt_enable_height"`
+
+	SBTUpdateHeight int64 `toml:"sbt_update_height"`
 }
 
 func DefaultConfig(dir string) *Config {
@@ -149,6 +156,7 @@ func NewApplication(cfg *Config) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	snapshots, err := NewSnapshotStore(filepath.Join(cfg.Dir, "snapshots"))
 	if err != nil {
 		return nil, err
@@ -157,12 +165,18 @@ func NewApplication(cfg *Config) (*Application, error) {
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	logger.Info("Application started!")
 
-	return &Application{
+	app := Application{
 		logger:    logger,
 		state:     state,
 		snapshots: snapshots,
 		cfg:       cfg,
-	}, nil
+	}
+
+	app.blockDelayState, err = NewBlockDelayState(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	return &app, nil
 }
 
 // Info implements ABCI.
@@ -171,6 +185,11 @@ func (app *Application) Info(context.Context, *abci.InfoRequest) (*abci.InfoResp
 	if err := app.logABCIRequest(r); err != nil {
 		return nil, err
 	}
+
+	// TODO should we read here from the DB
+	// if app.blockDelayState != nil && app.blockDelayState.blockDelay != nil {
+	// 	fmt.Println("KKKK ", app.blockDelay.InitialHeight, " Time ", app.blockDelay.InitialTime)
+	// }
 
 	height, hash := app.state.Info()
 	return &abci.InfoResponse{
@@ -204,6 +223,16 @@ func (app *Application) updateFeatureEnableHeights(currentHeight int64) *cmtprot
 		app.logger.Info("updating PBTS Height in app_state", "height", app.cfg.PbtsEnableHeight)
 		app.state.Set(prefixReservedKey+suffixPbtsHeight, strconv.FormatInt(app.cfg.PbtsEnableHeight, 10))
 	}
+	if app.cfg.SBTUpdateHeight == currentHeight {
+		app.logger.Info("enabling SBT on the fly",
+			"current_height", currentHeight,
+			"enable_height", app.cfg.PbtsEnableHeight)
+		params.Feature.SbtEnableHeight = &gogo.Int64Value{Value: app.cfg.SBTEnableHeight}
+		retNil = false
+		app.logger.Info("updating SBT Height in app_state", "height", app.cfg.SBTEnableHeight)
+		app.state.Set(prefixReservedKey+suffixSBTHeight, strconv.FormatInt(app.cfg.SBTEnableHeight, 10))
+	}
+
 	if retNil {
 		return nil
 	}
@@ -231,6 +260,8 @@ func (app *Application) InitChain(_ context.Context, req *abci.InitChainRequest)
 	app.state.Set(prefixReservedKey+suffixVoteExtHeight, strconv.FormatInt(req.ConsensusParams.Feature.VoteExtensionsEnableHeight.GetValue(), 10))
 	app.logger.Info("setting PBTS Height in app_state", "height", req.ConsensusParams.Feature.PbtsEnableHeight.GetValue())
 	app.state.Set(prefixReservedKey+suffixPbtsHeight, strconv.FormatInt(req.ConsensusParams.Feature.PbtsEnableHeight.GetValue(), 10))
+	app.logger.Info("setting Stable Block Time in app_state", "height", req.ConsensusParams.Feature.SbtEnableHeight.GetValue())
+	app.state.Set(prefixReservedKey+suffixSBTHeight, strconv.FormatInt(req.ConsensusParams.Feature.SbtEnableHeight.GetValue(), 10))
 	app.logger.Info("setting initial height in app_state", "initial_height", req.InitialHeight)
 	app.state.Set(prefixReservedKey+suffixInitialHeight, strconv.FormatInt(req.InitialHeight, 10))
 	// Get validators from genesis
@@ -252,6 +283,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.InitChainRequest)
 	if resp.Validators, err = app.validatorUpdates(0); err != nil {
 		return nil, err
 	}
+
 	return resp, nil
 }
 
@@ -343,6 +375,50 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.FinalizeBlock
 		time.Sleep(app.cfg.FinalizeBlockDelay)
 	}
 
+	var blockDelay time.Duration
+
+	_, isSBTEnableHeight, isSBTEnabled := app.checkSBTHeight(req.Height, "FinalizeBlock")
+
+	if !isSBTEnabled {
+		blockDelay = 500 * time.Millisecond
+	} else {
+		// Check if we have not initialized or loaded previous state
+		if app.blockDelayState == nil {
+			app.blockDelayState, err = NewBlockDelayState(app.cfg.Dir)
+			if err != nil {
+				panic(fmt.Errorf("error reading block delay state %s", err))
+			}
+		}
+		// It will be nil only when we have not saved the previous state
+		// Thus SBT has just been enabled and we are not catching up
+		if app.blockDelayState.blockDelay == nil {
+			if isSBTEnableHeight {
+				// just enabling it now
+				app.blockDelayState.blockDelay = BlockDelayUponGenesis(req.Time, req.Height)
+				err = app.blockDelayState.save() // In beacon-kit the delay is saved in Commit;
+				if err != nil {
+					panic(fmt.Errorf("error saving block delay state %s", err))
+				}
+				blockDelay = 500 * time.Millisecond
+			}
+		} else {
+			appHeight := app.getAppHeight()
+			if appHeight < req.Height {
+				// we are catching up so ignore the delay
+				blockDelay = 500 * time.Millisecond
+			} else {
+				blockDelay = app.blockDelayState.blockDelay.Next(req.Time, req.Height)
+				err = app.blockDelayState.save() // In beacon-kit the delay is saved in Commit;
+				if err != nil {
+					panic(fmt.Errorf("error saving block delay state %s", err))
+				}
+			}
+		}
+		// if app.blockDelayState != nil && app.blockDelayState.blockDelay != nil {
+		// 	fmt.Println("AppState ", app.blockDelayState.blockDelay)
+		// }
+	}
+
 	return &abci.FinalizeBlockResponse{
 		TxResults:             txs,
 		ValidatorUpdates:      valUpdates,
@@ -363,7 +439,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.FinalizeBlock
 				},
 			},
 		},
-		NextBlockDelay: 1 * time.Second,
+		NextBlockDelay: blockDelay,
 	}, nil
 }
 
@@ -715,6 +791,30 @@ func (app *Application) getAppHeight() int64 {
 		appHeight = initialHeight - 1
 	}
 	return appHeight + 1
+}
+
+func (app *Application) checkSBTHeight(height int64, callsite string) (appHeight int64, isSBTExtHeight bool, sbtEnabled bool) {
+	appHeight = app.getAppHeight()
+	if height != appHeight {
+		panic(fmt.Errorf(
+			"got unexpected height in %s request; expected %d, actual %d",
+			callsite, appHeight, height,
+		))
+	}
+
+	sbtHeightStr := app.state.Get(prefixReservedKey + suffixSBTHeight)
+	if len(sbtHeightStr) == 0 {
+		panic("sbt height not set in database")
+	}
+	sbtExtHeight, err := strconv.ParseInt(sbtHeightStr, 10, 64)
+	if err != nil {
+		panic(fmt.Errorf("malformed sbt height %q in database", sbtHeightStr))
+	}
+	currentHeight := appHeight
+
+	isSBTExtHeight = sbtExtHeight != 0 && currentHeight == sbtExtHeight
+	sbtEnabled = sbtExtHeight != 0 && currentHeight >= sbtExtHeight
+	return appHeight, isSBTExtHeight, sbtEnabled
 }
 
 func (app *Application) checkHeightAndExtensions(isPrepareProcessProposal bool, height int64, callsite string) (int64, bool) {
