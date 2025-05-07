@@ -63,14 +63,19 @@ func TestGenesisGood(t *testing.T) {
 			"genesis_time": "0001-01-01T00:00:00Z",
 			"chain_id": "test-chain-QDKdJr",
 			"initial_height": "1000",
-			"consensus_params": null,
 			"validators": [{
 				"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
 				"power":"10",
 				"name":""
 			}],
 			"app_hash":"",
-			"app_state":{"account_owner": "Bob"}
+			"app_state":{"account_owner": "Bob"},
+			"consensus_params": {
+				"validator": {"pub_key_types":["secp256k1"]},
+				"evidence": {"max_age_num_blocks": "100", "max_age_duration": "10"},
+				"block": {"max_bytes": "819200"},
+				"blob": {"max_bytes": "819200"}
+			}
 		}`,
 	)
 	_, err := GenesisDocFromJSON(genDocBytes)

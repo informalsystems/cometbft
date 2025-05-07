@@ -110,6 +110,17 @@ func MsgToProto(msg Message) (proto.Message, error) {
 
 		pb = vsb
 
+	case *BlobPartMessage:
+		parts, err := msg.Part.ToProto()
+		if err != nil {
+			return pb, fmt.Errorf("msg to proto error: %w", err)
+		}
+		pb = &cmtcons.BlobPart{
+			Height: msg.Height,
+			Round:  msg.Round,
+			Part:   *parts,
+		}
+
 	default:
 		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
 	}
@@ -225,6 +236,18 @@ func MsgFromProto(p proto.Message) (Message, error) {
 			BlockID: *bi,
 			Votes:   bits,
 		}
+
+	case *cmtcons.BlobPart:
+		parts, err := types.PartFromProto(&msg.Part)
+		if err != nil {
+			return nil, fmt.Errorf("blobpart msg to proto error: %w", err)
+		}
+		pb = &BlobPartMessage{
+			Height: msg.Height,
+			Round:  msg.Round,
+			Part:   parts,
+		}
+
 	default:
 		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
 	}

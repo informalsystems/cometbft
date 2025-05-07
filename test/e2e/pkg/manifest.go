@@ -99,6 +99,10 @@ type Manifest struct {
 	// value will be written to the genesis file of all nodes.
 	BlockMaxBytes int64 `toml:"block_max_bytes"`
 
+	// BlobMaxBytes specifies the maximum size in bytes of a blob. This
+	// value will be written to the genesis file of all nodes.
+	BlobMaxBytes int64 `toml:"blob_max_bytes"`
+
 	// VoteExtensionsEnableHeight configures the first height during which
 	// the chain will use and require vote extension data to be present
 	// in precommit messages.

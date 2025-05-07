@@ -22,6 +22,8 @@ import (
 var (
 	stateKey        = []byte("stateKey")
 	kvPairPrefixKey = []byte("kvPairKey:")
+
+	_testBlob = []byte("testBlob")
 )
 
 const (
@@ -49,6 +51,9 @@ type Application struct {
 	// If true, the app will generate block events in BeginBlock. Used to test the event indexer
 	// Should be false by default to avoid generating too much data.
 	genBlockEvents bool
+
+	// Generate blobs
+	generateBlobs bool
 }
 
 // NewApplication creates an instance of the kvstore from the provided database
@@ -78,6 +83,17 @@ func NewInMemoryApplication() *Application {
 
 func (app *Application) SetGenBlockEvents() {
 	app.genBlockEvents = true
+}
+
+func (app *Application) SetGenerateBlobs() {
+	app.generateBlobs = true
+}
+
+// TestBlob returns the blob that the app returns in PrepareProposal.
+// TestBlob is only used in testing, and is not part of the abci.Application
+// interface.
+func (*Application) TestBlob() []byte {
+	return _testBlob
 }
 
 // Info returns information about the state of the application. This is generally used everytime a Tendermint instance
@@ -162,6 +178,9 @@ func isValidTx(tx []byte) bool {
 // quite a trivial example of transaction modification.
 // NOTE: we assume that CometBFT will never provide more transactions than can fit in a block.
 func (app *Application) PrepareProposal(ctx context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
+	if app.generateBlobs {
+		return &types.ResponsePrepareProposal{Txs: app.formatTxs(ctx, req.Txs), Blob: _testBlob}, nil
+	}
 	return &types.ResponsePrepareProposal{Txs: app.formatTxs(ctx, req.Txs)}, nil
 }
 
@@ -185,6 +204,10 @@ func (app *Application) ProcessProposal(ctx context.Context, req *types.RequestP
 		if resp, err := app.CheckTx(ctx, &types.RequestCheckTx{Tx: tx}); err != nil || resp.Code != CodeTypeOK {
 			return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_REJECT}, nil
 		}
+	}
+
+	if app.generateBlobs && !bytes.Equal(req.Blob, _testBlob) {
+		return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_REJECT}, nil
 	}
 	return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_ACCEPT}, nil
 }

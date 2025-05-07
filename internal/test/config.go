@@ -52,6 +52,9 @@ var testGenesisFmt = `{
 			"max_gas": "-1",
 			"time_iota_ms": "10"
 		},
+		"blob": {
+			"max_bytes": "819200"
+		},
 		"evidence": {
 			"max_age_num_blocks": "100000",
 			"max_age_duration": "172800000000000",

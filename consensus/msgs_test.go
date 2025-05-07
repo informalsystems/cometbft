@@ -46,12 +46,32 @@ func TestMsgToProto(t *testing.T) {
 	pbParts, err := parts.ToProto()
 	require.NoError(t, err)
 
+	blobPsh := types.PartSetHeader{
+		Total: 1,
+		Hash:  cmtrand.Bytes(32),
+	}
+	blobPart := types.Part{
+		Index: 1,
+		Bytes: []byte("blob"),
+		Proof: merkle.Proof{
+			Total:    1,
+			Index:    1,
+			LeafHash: cmtrand.Bytes(32),
+			Aunts:    [][]byte{},
+		},
+	}
+	blobID := types.BlobID{
+		Hash:          cmtrand.Bytes(32),
+		PartSetHeader: blobPsh,
+	}
+
 	proposal := types.Proposal{
 		Type:      cmtproto.ProposalType,
 		Height:    1,
 		Round:     1,
 		POLRound:  1,
 		BlockID:   bi,
+		BlobID:    blobID,
 		Timestamp: time.Now(),
 		Signature: cmtrand.Bytes(20),
 	}
@@ -69,6 +89,8 @@ func TestMsgToProto(t *testing.T) {
 		time.Now(),
 	)
 	pbVote := vote.ToProto()
+	pbBlobPart, err := blobPart.ToProto()
+	require.NoError(t, err)
 
 	testsCases := []struct {
 		testName string
@@ -167,6 +189,17 @@ func TestMsgToProto(t *testing.T) {
 			Type:    1,
 			BlockID: pbBi,
 			Votes:   *pbBits,
+		},
+
+			false},
+		{"successful BlobPartMessage", &BlobPartMessage{
+			Height: 42,
+			Round:  1,
+			Part:   &blobPart,
+		}, &cmtcons.BlobPart{
+			Height: 42,
+			Round:  1,
+			Part:   *pbBlobPart,
 		},
 
 			false},
@@ -338,6 +371,7 @@ func TestConsMsgsVectors(t *testing.T) {
 		BlockID:   bi,
 		Timestamp: date,
 		Signature: []byte("add_more_exclamation"),
+		BlobID:    types.BlobID{},
 	}
 	pbProposal := proposal.ToProto()
 
@@ -389,7 +423,7 @@ func TestConsMsgsVectors(t *testing.T) {
 				Height: 1, Round: 1, BlockPartSetHeader: pbPsh, BlockParts: pbBits, IsCommit: false}}},
 			"1231080110011a24080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d22050801120100"},
 		{"Proposal", &cmtcons.Message{Sum: &cmtcons.Message_Proposal{Proposal: &cmtcons.Proposal{Proposal: *pbProposal}}},
-			"1a720a7008201001180120012a480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d320608c0b89fdc053a146164645f6d6f72655f6578636c616d6174696f6e"},
+			"1a760a7408201001180120012a480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d320608c0b89fdc053a146164645f6d6f72655f6578636c616d6174696f6e42021200"},
 		{"ProposalPol", &cmtcons.Message{Sum: &cmtcons.Message_ProposalPol{
 			ProposalPol: &cmtcons.ProposalPOL{Height: 1, ProposalPolRound: 1}}},
 			"2206080110011a00"},

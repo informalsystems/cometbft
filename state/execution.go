@@ -104,7 +104,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	state State,
 	lastExtCommit *types.ExtendedCommit,
 	proposerAddr []byte,
-) (*types.Block, error) {
+) (*types.Block, types.Blob, error) {
 
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	emptyMaxBytes := maxBytes == -1
@@ -148,20 +148,29 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, err
+		return nil, nil, err
 	}
 
 	txl := types.ToTxs(rpp.Txs)
 	if err := txl.Validate(maxDataBytes); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return state.MakeBlock(height, txl, commit, evidence, proposerAddr), nil
+	var (
+		preparedBlock = state.MakeBlock(height, txl, commit, evidence, proposerAddr)
+		blob          = rpp.Blob
+	)
+
+	if len(blob) > types.MaxBlobSizeBytes {
+		return nil, nil, fmt.Errorf("blob size %d exceeds limit MaxBlobSizeBytes=%d", len(blob), types.MaxBlobSizeBytes)
+	}
+	return preparedBlock, blob, nil
 }
 
 func (blockExec *BlockExecutor) ProcessProposal(
 	block *types.Block,
 	state State,
+	blob types.Blob,
 ) (bool, error) {
 	resp, err := blockExec.proxyApp.ProcessProposal(context.TODO(), &abci.RequestProcessProposal{
 		Hash:               block.Header.Hash(),
@@ -172,6 +181,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Misbehavior:        block.Evidence.Evidence.ToABCI(),
 		ProposerAddress:    block.ProposerAddress,
 		NextValidatorsHash: block.NextValidatorsHash,
+		Blob:               blob,
 	})
 	if err != nil {
 		return false, err

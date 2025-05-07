@@ -276,7 +276,7 @@ func BlockFromProto(bp *cmtproto.Block) (*Block, error) {
 	return b, b.ValidateBasic()
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 // MaxDataBytes returns the maximum size of block's data.
 //

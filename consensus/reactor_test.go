@@ -362,13 +362,13 @@ func TestSwitchToConsensusVoteExtensions(t *testing.T) {
 			cs.state.LastValidators = cs.state.Validators.Copy()
 			cs.state.ConsensusParams.ABCI.VoteExtensionsEnableHeight = testCase.initialRequiredHeight
 
-			propBlock, err := cs.createProposalBlock(ctx)
+			propBlock, _, err := cs.createProposalBlock(ctx)
 			require.NoError(t, err)
 
 			// Consensus is preparing to do the next height after the stored height.
 			cs.Height = testCase.storedHeight + 1
 			propBlock.Height = testCase.storedHeight
-			blockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
+			blockParts, err := propBlock.MakePartSet(types.PartSizeBytes)
 			require.NoError(t, err)
 
 			var voteSet *types.VoteSet
@@ -417,6 +417,30 @@ func TestSwitchToConsensusVoteExtensions(t *testing.T) {
 	}
 }
 
+func TestReactorRecordsVotesAndBlockPartsAndBlobParts(t *testing.T) {
+	n := 4
+
+	css, _, _, cleanup := randConsensusNetWithPeers(t, n, n, "consensus_reactor_test", newMockTickerFunc(true), newPersistentKVStoreWithPathAndBlob)
+
+	defer cleanup()
+	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, n)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+
+	// wait till everyone makes the first new block
+	timeoutWaitGroup(n, func(j int) {
+		<-blocksSubs[j].Out()
+	})
+
+	// Get peer
+	peer := reactors[1].Switch.Peers().List()[0]
+	// Get peer state
+	ps := peer.Get(types.PeerStateKey).(*PeerState)
+
+	assert.Greater(t, ps.VotesSent(), 0, "number of votes sent should have increased")
+	assert.Greater(t, ps.BlockPartsSent(), 0, "number of block parts sent should have increased")
+	assert.Greater(t, ps.BlobPartsSent(), 0, "number of blob parts sent should have increased")
+}
+
 // Test we record stats about votes and block parts from other peers.
 func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	N := 4
@@ -436,7 +460,7 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	ps := peer.Get(types.PeerStateKey).(*PeerState)
 
 	assert.Equal(t, true, ps.VotesSent() > 0, "number of votes sent should have increased")
-	assert.Equal(t, true, ps.BlockPartsSent() > 0, "number of votes sent should have increased")
+	assert.Equal(t, true, ps.BlockPartsSent() > 0, "number of block parts sent should have increased")
 }
 
 //-------------------------------------------------------------
@@ -886,7 +910,7 @@ func TestNewValidBlockMessageValidateBasic(t *testing.T) {
 		},
 		{
 			func(msg *NewValidBlockMessage) { msg.BlockParts = bits.NewBitArray(int(types.MaxBlockPartsCount) + 1) },
-			"blockParts bit array size 1602 not equal to BlockPartSetHeader.Total 1",
+			"blockParts bit array size 1601 not equal to BlockPartSetHeader.Total 1",
 		},
 	}
 
@@ -976,6 +1000,41 @@ func TestBlockPartMessageValidateBasic(t *testing.T) {
 	message.Part.Index = 1
 
 	assert.Equal(t, true, message.ValidateBasic() != nil, "Validate Basic had an unexpected result")
+}
+
+func TestBlobPartMessageValidateBasic(t *testing.T) {
+	testPart := new(types.Part)
+	testPart.Proof.LeafHash = tmhash.Sum([]byte("leaf"))
+	testCases := []struct {
+		testName      string
+		messageHeight int64
+		messageRound  int32
+		messagePart   *types.Part
+		expectErr     bool
+	}{
+		{"Valid Message", 0, 0, testPart, false},
+		{"Invalid Message", -1, 0, testPart, true},
+		{"Invalid Message", 0, -1, testPart, true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			message := BlobPartMessage{
+				Height: tc.messageHeight,
+				Round:  tc.messageRound,
+				Part:   tc.messagePart,
+			}
+
+			err := message.ValidateBasic()
+			msg := "Validate Basic had an unexpected result"
+			assert.Equal(t, tc.expectErr, err != nil, msg)
+		})
+	}
+
+	message := BlobPartMessage{Height: 0, Round: 0, Part: new(types.Part)}
+	message.Part.Index = 1
+
+	require.Error(t, message.ValidateBasic())
 }
 
 func TestHasVoteMessageValidateBasic(t *testing.T) {
@@ -1104,15 +1163,20 @@ func TestVoteSetBitsMessageValidateBasic(t *testing.T) {
 
 func TestMarshalJSONPeerState(t *testing.T) {
 	ps := NewPeerState(nil)
-	data, err := json.Marshal(ps)
+
+	gotJSON, err := json.Marshal(ps)
 	require.NoError(t, err)
-	require.JSONEq(t, `{
+
+	wantJSON := `{
 		"round_state":{
 			"height": "0",
 			"round": -1,
 			"step": 0,
 			"start_time": "0001-01-01T00:00:00Z",
 			"proposal": false,
+			"proposal_blob_part_set_header":
+				{"total":0, "hash":""},
+			"proposal_blob_parts": null,
 			"proposal_block_part_set_header":
 				{"total":0, "hash":""},
 			"proposal_block_parts": null,
@@ -1127,8 +1191,11 @@ func TestMarshalJSONPeerState(t *testing.T) {
 		},
 		"stats":{
 			"votes":"0",
-			"block_parts":"0"}
-		}`, string(data))
+			"block_parts":"0",
+			"blob_parts":"0"}
+		}`
+
+	require.JSONEq(t, wantJSON, string(gotJSON))
 }
 
 func TestVoteMessageValidateBasic(t *testing.T) {

@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"time"
 
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -18,7 +19,7 @@ const TimeFormat = time.RFC3339Nano
 func CanonicalizeBlockID(bid cmtproto.BlockID) *cmtproto.CanonicalBlockID {
 	rbid, err := BlockIDFromProto(&bid)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("error parsing BlockID from protobuf: %v", err))
 	}
 	var cbid *cmtproto.CanonicalBlockID
 	if rbid == nil || rbid.IsZero() {
@@ -33,12 +34,31 @@ func CanonicalizeBlockID(bid cmtproto.BlockID) *cmtproto.CanonicalBlockID {
 	return cbid
 }
 
-// CanonicalizeVote transforms the given PartSetHeader to a CanonicalPartSetHeader.
+// CanonicalizeBlobID transforms the given BlobID to a CanonicalBlobID.
+func CanonicalizeBlobID(protoBlobID cmtproto.BlobID) *cmtproto.CanonicalBlobID {
+	blobID, err := BlobIDFromProto(&protoBlobID)
+	if err != nil {
+		panic(fmt.Sprintf("error parsing BlobID from protobuf: %v", err))
+	}
+
+	if blobID.IsNil() {
+		return nil
+	}
+
+	canonBlobID := &cmtproto.CanonicalBlobID{
+		Hash:          protoBlobID.Hash,
+		PartSetHeader: CanonicalizePartSetHeader(protoBlobID.PartSetHeader),
+	}
+
+	return canonBlobID
+}
+
+// CanonicalizePartSetHeader transforms the given PartSetHeader to a CanonicalPartSetHeader.
 func CanonicalizePartSetHeader(psh cmtproto.PartSetHeader) cmtproto.CanonicalPartSetHeader {
 	return cmtproto.CanonicalPartSetHeader(psh)
 }
 
-// CanonicalizeVote transforms the given Proposal to a CanonicalProposal.
+// CanonicalizeProposal transforms the given Proposal to a CanonicalProposal.
 func CanonicalizeProposal(chainID string, proposal *cmtproto.Proposal) cmtproto.CanonicalProposal {
 	return cmtproto.CanonicalProposal{
 		Type:      cmtproto.ProposalType,
@@ -48,6 +68,7 @@ func CanonicalizeProposal(chainID string, proposal *cmtproto.Proposal) cmtproto.
 		BlockID:   CanonicalizeBlockID(proposal.BlockID),
 		Timestamp: proposal.Timestamp,
 		ChainID:   chainID,
+		BlobID:    CanonicalizeBlobID(proposal.BlobID),
 	}
 }
 

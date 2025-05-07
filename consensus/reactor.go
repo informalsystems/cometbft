@@ -328,6 +328,10 @@ func (conR *Reactor) Receive(e p2p.Envelope) {
 			ps.SetHasProposalBlockPart(msg.Height, msg.Round, int(msg.Part.Index))
 			conR.Metrics.BlockParts.With("peer_id", string(e.Src.ID())).Add(1)
 			conR.conS.peerMsgQueue <- msgInfo{msg, e.Src.ID()}
+		case *BlobPartMessage:
+			ps.SetHasProposalBlobPart(msg.Height, msg.Round, int(msg.Part.Index))
+			conR.Metrics.BlobParts.With("peer_id", string(e.Src.ID())).Add(1)
+			conR.conS.peerMsgQueue <- msgInfo{msg, e.Src.ID()}
 		default:
 			conR.Logger.Error(fmt.Sprintf("Unknown message type %v", reflect.TypeOf(msg)))
 		}
@@ -566,6 +570,29 @@ OUTER_LOOP:
 					},
 				}) {
 					ps.SetHasProposalBlockPart(prs.Height, prs.Round, index)
+				}
+				continue OUTER_LOOP
+			}
+		}
+
+		// Send proposal Blob parts?
+		if rs.ProposalBlobParts.HasHeader(prs.ProposalBlobPartSetHeader) {
+			if index, ok := rs.ProposalBlobParts.BitArray().Sub(prs.ProposalBlobParts.Copy()).PickRandom(); ok {
+				part := rs.ProposalBlobParts.GetPart(index)
+				parts, err := part.ToProto()
+				if err != nil {
+					panic(err)
+				}
+				logger.Debug("Sending blob part", "height", prs.Height, "round", prs.Round)
+				if peer.Send(p2p.Envelope{
+					ChannelID: DataChannel,
+					Message: &cmtcons.BlobPart{
+						Height: rs.Height, // This tells peer that this part applies to us.
+						Round:  rs.Round,  // This tells peer that this part applies to us.
+						Part:   *parts,
+					},
+				}) {
+					ps.SetHasProposalBlobPart(prs.Height, prs.Round, index)
 				}
 				continue OUTER_LOOP
 			}
@@ -973,7 +1000,10 @@ func (conR *Reactor) peerStatsRoutine() {
 				if numParts := ps.RecordBlockPart(); numParts%blocksToContributeToBecomeGoodPeer == 0 {
 					conR.Switch.MarkPeerAsGood(peer)
 				}
+			case *BlobPartMessage:
+				ps.RecordBlobPart()
 			}
+
 		case <-conR.conS.Quit():
 			return
 
@@ -1035,11 +1065,16 @@ type PeerState struct {
 type peerStateStats struct {
 	Votes      int `json:"votes"`
 	BlockParts int `json:"block_parts"`
+	BlobParts  int `json:"blob_parts"`
 }
 
 func (pss peerStateStats) String() string {
-	return fmt.Sprintf("peerStateStats{votes: %d, blockParts: %d}",
-		pss.Votes, pss.BlockParts)
+	return fmt.Sprintf(
+		"peerStateStats{votes: %d, blockParts: %d, blobParts: %d}",
+		pss.Votes,
+		pss.BlockParts,
+		pss.BlobParts,
+	)
 }
 
 // NewPeerState returns a new PeerState for the given Peer
@@ -1115,6 +1150,10 @@ func (ps *PeerState) SetHasProposal(proposal *types.Proposal) {
 	ps.PRS.ProposalBlockParts = bits.NewBitArray(int(proposal.BlockID.PartSetHeader.Total))
 	ps.PRS.ProposalPOLRound = proposal.POLRound
 	ps.PRS.ProposalPOL = nil // Nil until ProposalPOLMessage received.
+	if !proposal.BlobID.IsNil() {
+		ps.PRS.ProposalBlobPartSetHeader = proposal.BlobID.PartSetHeader
+		ps.PRS.ProposalBlobParts = bits.NewBitArray(int(proposal.BlobID.PartSetHeader.Total))
+	}
 }
 
 // InitProposalBlockParts initializes the peer's proposal block parts header and bit array.
@@ -1140,6 +1179,29 @@ func (ps *PeerState) SetHasProposalBlockPart(height int64, round int32, index in
 	}
 
 	ps.PRS.ProposalBlockParts.SetIndex(index, true)
+}
+
+// SetHasProposalBlobPart sets the given blob part index as known for the peer.
+func (ps *PeerState) SetHasProposalBlobPart(height int64, round int32, index int) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	ps.setHasProposalBlobPart(height, round, index)
+}
+
+func (ps *PeerState) setHasProposalBlobPart(height int64, round int32, index int) {
+	ps.logger.Debug("setHasProposalBlobPart",
+		"peerH/R",
+		log.NewLazySprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
+		"H/R",
+		log.NewLazySprintf("%d/%d", height, round),
+		"index", index)
+
+	if ps.PRS.Height != height || ps.PRS.Round != round {
+		return
+	}
+
+	ps.PRS.ProposalBlobParts.SetIndex(index, true)
 }
 
 // PickSendVote picks a vote and sends it to the peer.
@@ -1334,7 +1396,25 @@ func (ps *PeerState) BlockPartsSent() int {
 	return ps.Stats.BlockParts
 }
 
-// SetHasVote sets the given vote as known by the peer
+// RecordBlobPart increments internal blob part related statistics for this peer.
+// It returns the total number of added blob parts.
+func (ps *PeerState) RecordBlobPart() int {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	ps.Stats.BlobParts++
+	return ps.Stats.BlobParts
+}
+
+// BlobPartsSent returns the number of useful blob parts the peer has sent us.
+func (ps *PeerState) BlobPartsSent() int {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	return ps.Stats.BlobParts
+}
+
+// SetHasVote sets the given vote as known by the peer.
 func (ps *PeerState) SetHasVote(vote *types.Vote) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
@@ -1383,6 +1463,8 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		ps.PRS.Proposal = false
 		ps.PRS.ProposalBlockPartSetHeader = types.PartSetHeader{}
 		ps.PRS.ProposalBlockParts = nil
+		ps.PRS.ProposalBlobPartSetHeader = types.PartSetHeader{}
+		ps.PRS.ProposalBlobParts = nil
 		ps.PRS.ProposalPOLRound = -1
 		ps.PRS.ProposalPOL = nil
 		// We'll update the BitArray capacity later.
@@ -1516,6 +1598,7 @@ func init() {
 	cmtjson.RegisterType(&HasVoteMessage{}, "tendermint/HasVote")
 	cmtjson.RegisterType(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23")
 	cmtjson.RegisterType(&VoteSetBitsMessage{}, "tendermint/VoteSetBits")
+	cmtjson.RegisterType(&BlobPartMessage{}, "tendermint/BlobPart")
 }
 
 //-------------------------------------
@@ -1697,7 +1780,36 @@ func (m *BlockPartMessage) String() string {
 	return fmt.Sprintf("[BlockPart H:%v R:%v P:%v]", m.Height, m.Round, m.Part)
 }
 
-//-------------------------------------
+// -------------------------------------
+
+// BlobPartMessage is sent when gossipping a piece of the blob associated with the
+// block being proposed.
+type BlobPartMessage struct {
+	Height int64
+	Round  int32
+	Part   *types.Part
+}
+
+// ValidateBasic performs basic validation.
+func (m *BlobPartMessage) ValidateBasic() error {
+	if m.Height < 0 {
+		return errors.New("negative Height")
+	}
+	if m.Round < 0 {
+		return errors.New("negative Round")
+	}
+	if err := m.Part.ValidateBasic(); err != nil {
+		return fmt.Errorf("wrong part field: %v", err)
+	}
+	return nil
+}
+
+// String returns a string representation.
+func (m *BlobPartMessage) String() string {
+	return fmt.Sprintf("[BlobPart H:%v R:%v P:%v]", m.Height, m.Round, m.Part)
+}
+
+// -------------------------------------
 
 // VoteMessage is sent when voting for a proposal (or lack thereof).
 type VoteMessage struct {

@@ -18,6 +18,10 @@ import (
 var (
 	testProposal *Proposal
 	pbp          *cmtproto.Proposal
+	//nolint:unused
+	testBlockID BlockID
+	//nolint:unused
+	testBlobID BlobID
 )
 
 func init() {
@@ -32,6 +36,8 @@ func init() {
 			PartSetHeader: PartSetHeader{Total: 111, Hash: []byte("--June_15_2020_amino_was_removed")}},
 		POLRound:  -1,
 		Timestamp: stamp,
+		BlobID: BlobID{Hash: []byte("-this_blob_id_hash_is_32_bytes--"),
+			PartSetHeader: PartSetHeader{Total: 42, Hash: []byte("--this_header_hash_is_32_bytes--")}},
 	}
 	pbp = testProposal.ToProto()
 }
@@ -48,7 +54,7 @@ func TestProposalSignable(t *testing.T) {
 
 func TestProposalString(t *testing.T) {
 	str := testProposal.String()
-	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}` //nolint:lll // ignore line length for tests
+	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65, -1) (2D746869735F626C6F625F69645F686173685F69735F33325F62797465732D2D:42:2D2D74686973) 000000000000 @ 2018-02-11T07:09:22.765Z}` //nolint:lll // ignore line length for tests
 	if str != expected {
 		t.Errorf("got unexpected string for Proposal. Expected:\n%v\nGot:\n%v", expected, str)
 	}
@@ -61,7 +67,8 @@ func TestProposalVerifySignature(t *testing.T) {
 
 	prop := NewProposal(
 		4, 2, 2,
-		BlockID{cmtrand.Bytes(tmhash.Size), PartSetHeader{777, cmtrand.Bytes(tmhash.Size)}})
+		BlockID{cmtrand.Bytes(tmhash.Size), PartSetHeader{777, cmtrand.Bytes(tmhash.Size)}},
+		BlobID{cmtrand.Bytes(tmhash.Size), PartSetHeader{42, cmtrand.Bytes(tmhash.Size)}})
 	p := prop.ToProto()
 	signBytes := ProposalSignBytes("test_chain_id", p)
 
@@ -146,13 +153,15 @@ func TestProposalValidateBasic(t *testing.T) {
 		}, true},
 	}
 	blockID := makeBlockID(tmhash.Sum([]byte("blockhash")), math.MaxInt32, tmhash.Sum([]byte("partshash")))
+	blobID := mockBlobID(tmhash.Sum([]byte("blobhash")), math.MaxInt32, tmhash.Sum([]byte("partshash")))
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			prop := NewProposal(
 				4, 2, 2,
-				blockID)
+				blockID,
+				blobID)
 			p := prop.ToProto()
 			err := privVal.SignProposal("test_chain_id", p)
 			prop.Signature = p.Signature
@@ -164,9 +173,9 @@ func TestProposalValidateBasic(t *testing.T) {
 }
 
 func TestProposalProtoBuf(t *testing.T) {
-	proposal := NewProposal(1, 2, 3, makeBlockID([]byte("hash"), 2, []byte("part_set_hash")))
+	proposal := NewProposal(1, 2, 3, makeBlockID([]byte("hash"), 2, []byte("part_set_hash")), mockBlobID([]byte("hash"), 4, []byte("part_set_hash")))
 	proposal.Signature = []byte("sig")
-	proposal2 := NewProposal(1, 2, 3, BlockID{})
+	proposal2 := NewProposal(1, 2, 3, BlockID{}, BlobID{})
 
 	testCases := []struct {
 		msg     string

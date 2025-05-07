@@ -90,9 +90,9 @@ type RoundState struct {
 	//     response to `ProcessProposal`, or "Reject"
 
 	// Last known round with POL for non-nil valid block.
-	ValidRound int32        `json:"valid_round"`
-	ValidBlock *types.Block `json:"valid_block"` // Last known block of POL mentioned above.
-
+	ValidRound int32 `json:"valid_round"`
+	// Last known block of POL mentioned above.
+	ValidBlock *types.Block `json:"valid_block"`
 	// Last known block parts of POL mentioned above.
 	ValidBlockParts           *types.PartSet      `json:"valid_block_parts"`
 	Votes                     *HeightVoteSet      `json:"votes"`
@@ -100,6 +100,9 @@ type RoundState struct {
 	LastCommit                *types.VoteSet      `json:"last_commit"`  // Last precommits at Height-1
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
+
+	ProposalBlob      types.Blob     `json:"proposal_blob"`
+	ProposalBlobParts *types.PartSet `json:"proposal_blob_parts"`
 }
 
 // Compressed version of the RoundState for use in RPC
@@ -111,6 +114,7 @@ type RoundStateSimple struct {
 	ValidBlockHash    bytes.HexBytes      `json:"valid_block_hash"`
 	Votes             json.RawMessage     `json:"height_vote_set"`
 	Proposer          types.ValidatorInfo `json:"proposer"`
+	ProposalBlobHash  bytes.HexBytes      `json:"proposal_blob_hash"`
 }
 
 // Compress the RoundState to RoundStateSimple
@@ -129,6 +133,7 @@ func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 		ProposalBlockHash: rs.ProposalBlock.Hash(),
 		LockedBlockHash:   rs.LockedBlock.Hash(),
 		ValidBlockHash:    rs.ValidBlock.Hash(),
+		ProposalBlobHash:  rs.ProposalBlob.Hash(),
 		Votes:             votesJSON,
 		Proposer: types.ValidatorInfo{
 			Address: addr,
@@ -162,11 +167,17 @@ func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
 		PartSetHeader: rs.ProposalBlockParts.Header(),
 	}
 
+	blobID := types.BlobID{
+		Hash:          rs.ProposalBlob.Hash(),
+		PartSetHeader: rs.ProposalBlobParts.Header(),
+	}
+
 	return types.EventDataCompleteProposal{
 		Height:  rs.Height,
 		Round:   rs.Round,
 		Step:    rs.Step.String(),
 		BlockID: blockID,
+		BlobID:  blobID,
 	}
 }
 
@@ -193,6 +204,7 @@ func (rs *RoundState) StringIndented(indent string) string {
 %s  Validators:    %v
 %s  Proposal:      %v
 %s  ProposalBlock: %v %v
+%s  ProposalBlob:  %v %v
 %s  LockedRound:   %v
 %s  LockedBlock:   %v %v
 %s  ValidRound:    %v
@@ -207,6 +219,7 @@ func (rs *RoundState) StringIndented(indent string) string {
 		indent, rs.Validators.StringIndented(indent+"  "),
 		indent, rs.Proposal,
 		indent, rs.ProposalBlockParts.StringShort(), rs.ProposalBlock.StringShort(),
+		indent, rs.ProposalBlobParts.StringShort(), rs.ProposalBlob.String(),
 		indent, rs.LockedRound,
 		indent, rs.LockedBlockParts.StringShort(), rs.LockedBlock.StringShort(),
 		indent, rs.ValidRound,

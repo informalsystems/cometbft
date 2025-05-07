@@ -12,6 +12,13 @@ message CanonicalBlockID {
   CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
 }
 
+// CanonicalBlobID is a canonical representation of a BlobID, which gets
+// serialized and signed.
+message CanonicalBlobID {
+  bytes                  hash            = 1;
+  CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
+}
+
 message CanonicalPartSetHeader {
   uint32 total = 1;
   bytes  hash  = 2;
@@ -25,6 +32,7 @@ message CanonicalProposal {
   CanonicalBlockID          block_id  = 5 [(gogoproto.customname) = "BlockID"];
   google.protobuf.Timestamp timestamp = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   string                    chain_id  = 7 [(gogoproto.customname) = "ChainID"];
+  CanonicalBlobID           blob_id   = 8 [(gogoproto.customname) = "BlobID"];
 }
 
 message CanonicalVote {

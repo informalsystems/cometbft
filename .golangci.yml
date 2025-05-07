@@ -73,6 +73,25 @@ linters-settings:
           - github.com/stretchr/testify/require
           - github.com/syndtr/goleveldb
           - github.com/decred/dcrd/dcrec/secp256k1/v4
+          - google.golang.org/protobuf/proto
+          - google.golang.org/protobuf/types/known/timestamppb
+          - golang.org/x/sync/errgroup
+          - golang.org/x/net/netutil
+          - golang.org/x/crypto/chacha20poly1305
+          - golang.org/x/net/netutil
+          - google.golang.org/grpc
+          - golang.org/x/net/context
+          - google.golang.org/grpc
+          - golang.org/x/crypto/openpgp/armor
+          - gonum.org/v1/gonum/stat
+          - golang.org/x/crypto/chacha20poly1305
+          - golang.org/x/crypto/curve25519
+          - golang.org/x/crypto/hkdf
+          - golang.org/x/crypto/nacl/box
+          - google.golang.org/grpc
+          - google.golang.org/grpc/credentials/insecure
+          - golang.org/x/crypto/nacl/secretbox
+          - golang.org/x/sync/semaphore
       test:
         files:
           - "$test"
@@ -94,6 +113,11 @@ linters-settings:
           - github.com/spf13
           - github.com/stretchr/testify
           - github.com/decred/dcrd/dcrec/secp256k1/v4
+          - google.golang.org/grpc
+          - golang.org/x/net/context
+          - golang.org/x/crypto/bcrypt
+          - golang.org/x/crypto/chacha20poly1305
+          - google.golang.org/protobuf/types/known/timestamppb
 
   revive:
     enable-all-rules: true

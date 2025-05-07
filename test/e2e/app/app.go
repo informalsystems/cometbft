@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,8 @@ type Application struct {
 	cfg             *Config
 	restoreSnapshot *abci.Snapshot
 	restoreChunks   [][]byte
+	// BlobCache is short-term storage for blobs received.
+	blobCache map[int64][]byte
 }
 
 // Config allows for the setting of high level parameters for running the e2e Application
@@ -118,6 +121,58 @@ func DefaultConfig(dir string) *Config {
 	}
 }
 
+// blobOracle can tell you the expected blob on a specific height.
+// It can be used to add blobs to proposals or simulate network peer responses.
+// Blob properties: height modulo 4
+// 0 - no blob
+// 1 - blob is exactly 8 bytes long and contains the height truncated into a byte 8 times
+// 2 - blob is empty ([]byte{})
+// 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
+// 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
+func blobOracle(height int64) ([]byte, bool) {
+	switch height % 4 {
+	case 1:
+		truncatedHeight := byte(height % 0x100)
+		data := bytes.Repeat([]byte{truncatedHeight}, 8)
+		return data, true
+	case 2:
+		return []byte{}, true
+	case 3:
+		return []byte(fmt.Sprintf("BLOB%x", height*0x80)), true
+	case 4:
+		truncatedHeight := byte(height % 0x10000)
+		data := bytes.Repeat([]byte{truncatedHeight}, cmttypes.MaxBlobSizeBytes/4)
+		return data, true
+	}
+	return nil, false
+}
+
+const noBlob = "NOTHING TO SEE HERE, PLEASE MOVE ALONG (NO BLOB)"
+
+func noBlobBytes() []byte {
+	return []byte(noBlob)
+}
+
+func isBlob(blob []byte) bool {
+	return !bytes.Equal(blob, []byte(noBlob))
+}
+
+// CreateBlob creates a new blob for a proposal at this height.
+func CreateBlob(height int64) ([]byte, bool) {
+	return blobOracle(height)
+}
+
+func VerifyBlob(height int64, blob []byte) bool {
+	// The application might have internal checks that ensures a blob is valid.
+	// In this test application, we know what a valid blob should look like.
+	validBlob, exist := blobOracle(height)
+	if !exist {
+		// The application received a blob at a height where no blob should be.
+		return len(blob) == 0
+	}
+	return bytes.Equal(validBlob, blob)
+}
+
 // NewApplication creates the application.
 func NewApplication(cfg *Config) (*Application, error) {
 	state, err := NewState(cfg.Dir, cfg.PersistInterval)
@@ -128,11 +183,13 @@ func NewApplication(cfg *Config) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	blobCache := make(map[int64][]byte)
 	return &Application{
 		logger:    log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
 		state:     state,
 		snapshots: snapshots,
 		cfg:       cfg,
+		blobCache: blobCache,
 	}, nil
 }
 
@@ -219,6 +276,29 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 	return &abci.ResponseCheckTx{Code: kvstore.CodeTypeOK, GasWanted: 1}, nil
 }
 
+// GetBlob is used in FinalizeBlock to fetch a blob from the cache or from other peers, at a given height.
+// The function only simulates a network call to other peers to get the blob, it does not actually make the call.
+// It returns a boolean indicating if a blob exists (either retrieved from the simaulted network or from the
+// local cache) and the blob itself.
+func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
+	// First check the local cache
+	if blob, found := app.blobCache[height]; found {
+		if !isBlob(blob) {
+			return nil, false, nil
+		}
+		app.logger.Debug("Found blob in cache", "height", height)
+		return blob, true, nil
+	}
+	// If not found, reach out to other peers and retrieve it through them.
+	time.Sleep(100 * time.Millisecond) // Add simulated network delay
+	blobFromPeer, exist := blobOracle(height)
+	if exist && !isBlob(blobFromPeer) {
+		return nil, false, nil
+	}
+	app.logger.Debug("Retrieved blob from network", "height", height)
+	return blobFromPeer, exist, nil
+}
+
 // FinalizeBlock implements ABCI.
 func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	txs := make([]*abci.ExecTxResult, len(req.Txs))
@@ -234,6 +314,21 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		app.state.Set(key, value)
 
 		txs[i] = &abci.ExecTxResult{Code: kvstore.CodeTypeOK}
+	}
+
+	// Verify blob.
+	blob, exists, err := app.GetBlob(req.Height)
+	if err != nil {
+		return nil, fmt.Errorf("could not fetch blob for height %d, %s", req.Height, err.Error())
+	}
+	if exists && !VerifyBlob(req.Height, blob) {
+		return nil, fmt.Errorf("blob verification failed for height %d", req.Height)
+	}
+
+	// This is a short-term cache so we delete the entry after we received it.
+	delete(app.blobCache, req.Height)
+	if len(app.blobCache) != 0 {
+		app.logger.Error("blob cache should be empty", "size", len(app.blobCache))
 	}
 
 	for _, ev := range req.Misbehavior {
@@ -432,12 +527,18 @@ func (app *Application) PrepareProposal(
 		// Coherence: No need to call parseTx, as the check is stateless and has been performed by CheckTx
 		txs = append(txs, tx)
 	}
+	// Generate blob for the current height.
+	blob, exists := CreateBlob(req.Height)
 
 	if app.cfg.PrepareProposalDelay != 0 {
 		time.Sleep(app.cfg.PrepareProposalDelay)
 	}
 
-	return &abci.ResponsePrepareProposal{Txs: txs}, nil
+	if !exists {
+		return &abci.ResponsePrepareProposal{Txs: txs}, nil
+	}
+	fmt.Println("BLOB_1: ", blob)
+	return &abci.ResponsePrepareProposal{Txs: txs, Blob: blob}, nil
 }
 
 // ProcessProposal implements part of the Application interface.
@@ -445,6 +546,25 @@ func (app *Application) PrepareProposal(
 // NOTE It is up to real Applications to effect punitive behavior in the cases ProcessProposal
 // returns ResponseProcessProposal_REJECT, as it is evidence of misbehavior.
 func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	r := &abci.Request{Value: &abci.Request_ProcessProposal{ProcessProposal: &abci.RequestProcessProposal{}}}
+	app.logger.Info("ABCIRequest", "request", r)
+
+	fmt.Println("BLOB: ", req.Blob)
+
+	if !VerifyBlob(req.Height, req.Blob) {
+		app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)
+		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
+	}
+	// Blob verification
+	if len(req.Blob) != 0 {
+		// Proposal will be accepted by us and blob exists and valid, so we store it in the cache.
+		app.blobCache[req.Height] = req.Blob
+	} else {
+		// Proposal will be accepted by us and there is no blob.
+		// We make a note of it in the cache so we can inform FinalizeBlock. A real application will have better methods for this.
+		app.blobCache[req.Height] = noBlobBytes()
+	}
+
 	_, areExtensionsEnabled := app.checkHeightAndExtensions(true, req.Height, "ProcessProposal")
 
 	for _, tx := range req.Txs {
@@ -499,11 +619,12 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 
 	ext = ext[:extLen]
 	// Replay protection mechanism consists of: (a) the randomness of the extension (nonce), and (b) including the height
-	nonRpExt := fmt.Sprintf("%d|%x", req.Height, ext)
-	app.logger.Info("generated vote extension", "num", num, "ext", fmt.Sprintf("%x", ext), "height", appHeight, "nonRpExt", nonRpExt)
+	nonRpExt := []byte(fmt.Sprintf("%d|", req.Height))
+	nonRpExt = slices.Concat(nonRpExt, ext[:extLen])
+	app.logger.Info("generated vote extension", "num", num, "ext", ext, "ve_len", extLen, "height", appHeight, "nonRpExt", nonRpExt)
 	return &abci.ResponseExtendVote{
 		VoteExtension:  ext,
-		NonRpExtension: []byte(nonRpExt),
+		NonRpExtension: nonRpExt,
 	}, nil
 }
 
@@ -808,8 +929,8 @@ func parseVoteExtensions(expHeight int64, ext, nonRpExt []byte) (int64, error) {
 	if num >= voteExtensionMaxVal {
 		return 0, fmt.Errorf("vote extension value must be smaller than %d (was %d)", voteExtensionMaxVal, num)
 	}
-	parts := strings.Split(string(nonRpExt), "|")
-	if len(parts) != 2 {
+	parts := strings.SplitN(string(nonRpExt), "|", 2)
+	if len(parts) < 2 {
 		return 0, fmt.Errorf("non replay protected vote extension must have 2 parts (%d)", len(parts))
 	}
 	height, err := strconv.ParseInt(parts[0], 10, 64)
@@ -822,7 +943,7 @@ func parseVoteExtensions(expHeight int64, ext, nonRpExt []byte) (int64, error) {
 			height,
 		)
 	}
-	xExt := hex.EncodeToString(ext)
+	xExt := string(ext)
 	if parts[1] != xExt {
 		return 0, fmt.Errorf("non replay protected vote extension contains incorrect data (%s!=%s)",
 			xExt,

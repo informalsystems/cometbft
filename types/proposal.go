@@ -30,11 +30,15 @@ type Proposal struct {
 	BlockID   BlockID   `json:"block_id"`
 	Timestamp time.Time `json:"timestamp"`
 	Signature []byte    `json:"signature"`
+
+	// Not every proposal includes a blob, so some valid proposals may have an empty
+	// BlobID.
+	BlobID BlobID `json:"blob_id"`
 }
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
-func NewProposal(height int64, round int32, polRound int32, blockID BlockID) *Proposal {
+func NewProposal(height int64, round int32, polRound int32, blockID BlockID, blobID BlobID) *Proposal {
 	return &Proposal{
 		Type:      cmtproto.ProposalType,
 		Height:    height,
@@ -42,6 +46,7 @@ func NewProposal(height int64, round int32, polRound int32, blockID BlockID) *Pr
 		BlockID:   blockID,
 		POLRound:  polRound,
 		Timestamp: cmttime.Now(),
+		BlobID:    blobID,
 	}
 }
 
@@ -76,6 +81,11 @@ func (p *Proposal) ValidateBasic() error {
 	if len(p.Signature) > MaxSignatureSize {
 		return fmt.Errorf("signature is too big (max: %d)", MaxSignatureSize)
 	}
+
+	if err := p.BlobID.ValidateBasic(); err != nil {
+		return fmt.Errorf("wrong BlobID: %w", err)
+	}
+
 	return nil
 }
 
@@ -87,16 +97,20 @@ func (p *Proposal) ValidateBasic() error {
 // 4. POL round
 // 5. first 6 bytes of signature
 // 6. timestamp
+// 7. blob ID
 //
 // See BlockID#String.
 func (p *Proposal) String() string {
-	return fmt.Sprintf("Proposal{%v/%v (%v, %v) %X @ %s}",
+	return fmt.Sprintf(
+		"Proposal{%v/%v (%v, %v) (%v) %X @ %s}",
 		p.Height,
 		p.Round,
 		p.BlockID,
 		p.POLRound,
+		p.BlobID,
 		cmtbytes.Fingerprint(p.Signature),
-		CanonicalTime(p.Timestamp))
+		CanonicalTime(p.Timestamp),
+	)
 }
 
 // ProposalSignBytes returns the proto-encoding of the canonicalized Proposal,
@@ -131,6 +145,7 @@ func (p *Proposal) ToProto() *cmtproto.Proposal {
 	pb.PolRound = p.POLRound
 	pb.Timestamp = p.Timestamp
 	pb.Signature = p.Signature
+	pb.BlobID = p.BlobID.ToProto()
 
 	return pb
 }
@@ -149,6 +164,11 @@ func ProposalFromProto(pp *cmtproto.Proposal) (*Proposal, error) {
 		return nil, err
 	}
 
+	blobID, err := BlobIDFromProto(&pp.BlobID)
+	if err != nil {
+		return nil, err
+	}
+
 	p.BlockID = *blockID
 	p.Type = pp.Type
 	p.Height = pp.Height
@@ -156,6 +176,7 @@ func ProposalFromProto(pp *cmtproto.Proposal) (*Proposal, error) {
 	p.POLRound = pp.PolRound
 	p.Timestamp = pp.Timestamp
 	p.Signature = pp.Signature
+	p.BlobID = blobID
 
 	return p, p.ValidateBasic()
 }

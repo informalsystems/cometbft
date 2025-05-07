@@ -79,6 +79,13 @@ func (cs *State) readReplayMessage(msg *TimedWALMessage, newStepSub types.Subscr
 				"blockID", v.BlockID, "peer", peerID,
 				"extensionLen", len(v.Extension), "extSigLen", len(v.ExtensionSignature),
 				"nrp-extensionLen", len(v.NonRpExtension), "nrp-extSigLen", len(v.NonRpExtensionSignature))
+		case *BlobPartMessage:
+			cs.Logger.Info(
+				"Replay: BlobPart",
+				"height", msg.Height,
+				"round", msg.Round,
+				"peer", peerID,
+			)
 		}
 
 		cs.handleMsg(m)
