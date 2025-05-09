@@ -42,7 +42,7 @@ func TestConsensusParamsValidation(t *testing.T) {
 		13: {makeParams(-1, 0, 1, 2, 0, valEd25519, 0), true},
 		14: {makeParams(-2, 0, 1, 2, 0, valEd25519, 0), false},
 		// test blob params
-		15: {makeParams(1, 0, 0, 2, 0, valEd25519, 0), false},
+		15: {makeParams(1, 0, 0, 2, 0, valEd25519, 0), true},
 		16: {makeParams(1, 0, 80*1024, 2, 0, valEd25519, 0), true},
 		17: {makeParams(1, 0, 10, 2, 0, valEd25519, 0), true},
 		18: {makeParams(1, 0, 800*1024, 2, 0, valEd25519, 0), true},

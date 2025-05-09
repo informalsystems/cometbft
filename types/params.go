@@ -183,9 +183,6 @@ func (params ConsensusParams) ValidateBasic() error {
 			params.Block.MaxGas)
 	}
 
-	if params.Blob.MaxBytes == 0 {
-		return errors.New("blob.MaxBytes cannot be 0")
-	}
 	if params.Blob.MaxBytes < -1 {
 		return fmt.Errorf("blob.MaxBytes must be -1 or greater than 0. Got %d",
 			params.Blob.MaxBytes)

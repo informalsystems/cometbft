@@ -272,7 +272,7 @@ func decideProposal(
 	round int32,
 ) (*types.Proposal, *types.Block, types.Blob) {
 	cs1.mtx.Lock()
-	block, _, propBlockID, blob := createProposalBlockAndBlob(t, cs1)
+	block, _, _, blob := createProposalBlockAndBlob(t, cs1)
 	blockParts, err := block.MakePartSet(types.PartSizeBytes)
 	require.NoError(t, err)
 	validRound := cs1.ValidRound

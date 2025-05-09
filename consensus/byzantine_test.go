@@ -464,7 +464,7 @@ func byzantineDecideProposalFunc(ctx context.Context, t *testing.T, height int64
 	block1, blockParts1, propBlockID, blob := createProposalBlockAndBlob(t, cs)
 
 	blobParts := types.NewPartSetFromData(blob, types.PartSizeBytes)
-	blobID    := types.BlobID{
+	blobID := types.BlobID{
 		Hash:          blob.Hash(),
 		PartSetHeader: blobParts.Header(),
 	}

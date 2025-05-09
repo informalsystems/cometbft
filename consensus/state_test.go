@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cometbft/cometbft/mempool"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cometbft/cometbft/mempool"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
