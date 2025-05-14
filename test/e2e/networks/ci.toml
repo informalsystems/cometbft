@@ -5,6 +5,7 @@ ipv6 = true
 initial_height = 1000
 vote_extensions_update_height = -1
 vote_extensions_enable_height = 1000
+blob_max_bytes_update_height = 1000
 evidence = 5
 initial_state = { initial01 = "a", initial02 = "b", initial03 = "c" }
 prepare_proposal_delay = "100ms"

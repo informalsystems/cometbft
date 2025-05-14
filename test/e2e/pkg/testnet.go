@@ -191,7 +191,9 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
 	} else {
-		testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
+		if testnet.BlobMaxBytesUpdateHeight != -1 {
+			testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
+		}
 	}
 
 	if testnet.ABCIProtocol == "" {
@@ -398,7 +400,7 @@ func (t Testnet) Validate() error {
 	}
 
 	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+100) {
-		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight+t.InitialHeight)
+		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight)
 	}
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {
