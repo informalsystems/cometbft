@@ -149,6 +149,16 @@ func TestConsensusParamsUpdate(t *testing.T) {
 			},
 			makeParams(100, 200, 1, 300, 50, valSecp256k1, 0),
 		},
+		// upadate blob params
+		{
+			makeParams(1, 2, 1, 3, 0, valEd25519, 0),
+			&cmtproto.ConsensusParams{
+				Blob: &cmtproto.BlobParams{
+					MaxBytes: 100,
+				},
+			},
+			makeParams(1, 2, 100, 3, 0, valEd25519, 0),
+		},
 	}
 
 	for _, tc := range testCases {
