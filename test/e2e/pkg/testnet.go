@@ -399,8 +399,8 @@ func (t Testnet) Validate() error {
 		}
 	}
 
-	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+100) {
-		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight)
+	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+10) {
+		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 10(height 10): %d ", t.BlobMaxBytesUpdateHeight)
 	}
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {

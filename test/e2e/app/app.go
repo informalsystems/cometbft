@@ -136,7 +136,7 @@ func DefaultConfig(dir string) *Config {
 // 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
 // 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
 func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-	if height <= blobMaxBytesUpdateHeight+2 {
+	if height <= blobMaxBytesUpdateHeight+2 || blobMaxBytesUpdateHeight == -1 {
 		return nil, false
 	}
 	switch height % 4 {
@@ -192,7 +192,6 @@ func NewApplication(cfg *Config) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("XXXX ", cfg.BlobMaxBytesUpdateHeight)
 	blobCache := make(map[int64][]byte)
 	return &Application{
 		logger:    log.NewTMLogger(log.NewSyncWriter(os.Stdout)),
@@ -219,7 +218,7 @@ func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto
 	if params == nil {
 		params = &cmtproto.ConsensusParams{}
 	}
-	if app.cfg.BlobMaxBytesUpdateHeight == currentHeight {
+	if app.cfg.BlobMaxBytesUpdateHeight != 1 && app.cfg.BlobMaxBytesUpdateHeight == currentHeight {
 		app.logger.Info("updating blob max bytes on the fly",
 			"current_height", currentHeight,
 			"blob_max_bytes_update_height", app.cfg.BlobMaxBytesUpdateHeight)
@@ -267,6 +266,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	app.state.Set(prefixReservedKey+suffixVoteExtHeight, strconv.FormatInt(req.ConsensusParams.Abci.VoteExtensionsEnableHeight, 10))
 	app.logger.Info("setting initial height in app_state", "initial_height", req.InitialHeight)
 	app.state.Set(prefixReservedKey+suffixInitialHeight, strconv.FormatInt(req.InitialHeight, 10))
+	app.state.Set(prefixReservedKey+suffixBlobMaxBytes, strconv.FormatInt(req.ConsensusParams.Blob.MaxBytes, 10))
 	// Get validators from genesis
 	if req.Validators != nil {
 		for _, val := range req.Validators {
@@ -311,7 +311,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 // It returns a boolean indicating if a blob exists (either retrieved from the simaulted network or from the
 // local cache) and the blob itself.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
-	if app.cfg.BlobMaxBytesUpdateHeight > height {
+	if height <= app.cfg.BlobMaxBytesUpdateHeight+2 || app.cfg.BlobMaxBytesUpdateHeight == -1 {
 		// Blob max bytes is still 0 so we cannot send a blob
 		return nil, false, nil
 	}

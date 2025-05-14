@@ -62,7 +62,7 @@ var (
 	voteExtensionUpdateHeight = uniformChoice{int64(-1), int64(0), int64(1)} // -1: genesis, 0: InitChain, 1: (use offset)
 	voteExtensionEnabled      = weightedChoice{true: 3, false: 1}
 	voteExtensionHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
-	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(100)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(10)}
 )
 
 type generateConfig struct {
