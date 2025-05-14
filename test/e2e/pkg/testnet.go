@@ -98,6 +98,7 @@ type Testnet struct {
 	VoteExtensionsUpdateHeight                           int64
 	ExperimentalMaxGossipConnectionsToPersistentPeers    uint
 	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint
+	BlobMaxBytesUpdateHeight                             int64
 }
 
 // Node represents a CometBFT node in a testnet.
@@ -182,13 +183,17 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 		VoteExtensionsUpdateHeight: manifest.VoteExtensionsUpdateHeight,
 		ExperimentalMaxGossipConnectionsToPersistentPeers:    manifest.ExperimentalMaxGossipConnectionsToPersistentPeers,
 		ExperimentalMaxGossipConnectionsToNonPersistentPeers: manifest.ExperimentalMaxGossipConnectionsToNonPersistentPeers,
+		BlobMaxBytesUpdateHeight:                             manifest.BlobMaxBytesUpdateHeight,
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
 	}
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
+	} else {
+		testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
 	}
+
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = string(ProtocolBuiltin)
 	}
@@ -390,6 +395,10 @@ func (t Testnet) Validate() error {
 				t.VoteExtensionsUpdateHeight, t.VoteExtensionsEnableHeight,
 			)
 		}
+	}
+
+	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+100) {
+		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 100(height 100): %d ", t.BlobMaxBytesUpdateHeight+t.InitialHeight)
 	}
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {

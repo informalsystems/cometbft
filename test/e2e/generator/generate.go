@@ -62,6 +62,7 @@ var (
 	voteExtensionUpdateHeight = uniformChoice{int64(-1), int64(0), int64(1)} // -1: genesis, 0: InitChain, 1: (use offset)
 	voteExtensionEnabled      = weightedChoice{true: 3, false: 1}
 	voteExtensionHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(100)}
 )
 
 type generateConfig struct {
@@ -155,6 +156,12 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}, upgradeVersion st
 	if voteExtensionEnabled.Choose(r).(bool) {
 		baseHeight := max(manifest.VoteExtensionsUpdateHeight+1, manifest.InitialHeight)
 		manifest.VoteExtensionsEnableHeight = baseHeight + voteExtensionHeightOffset.Choose(r).(int64)
+	}
+
+	manifest.BlobMaxBytesUpdateHeight = blobMaxBytesUpdateHeight.Choose(r).(int64)
+
+	if manifest.BlobMaxBytesUpdateHeight != -1 && manifest.BlobMaxBytesUpdateHeight < manifest.InitialHeight {
+		manifest.BlobMaxBytesUpdateHeight = manifest.InitialHeight + manifest.BlobMaxBytesUpdateHeight
 	}
 
 	var numSeeds, numValidators, numFulls, numLightClients int

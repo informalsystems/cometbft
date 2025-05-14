@@ -292,6 +292,7 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		"finalize_block_delay":          node.Testnet.FinalizeBlockDelay,
 		"vote_extensions_enable_height": node.Testnet.VoteExtensionsEnableHeight,
 		"vote_extensions_update_height": node.Testnet.VoteExtensionsUpdateHeight,
+		"blob_max_bytes_update_height":  node.Testnet.BlobMaxBytesUpdateHeight,
 	}
 	switch node.ABCIProtocol {
 	case e2e.ProtocolUNIX:
