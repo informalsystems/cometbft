@@ -136,7 +136,7 @@ func DefaultConfig(dir string) *Config {
 // 3 - blob is variable length string that contains "BLOBXXX" where XXX is height multiplied by 0x80 in hex
 // 4 - blob is the size of MaxBlobSizeBytes and contains height truncated into two bytes repeated.
 func blobOracle(height int64, blobMaxBytesUpdateHeight int64) ([]byte, bool) {
-	if height <= blobMaxBytesUpdateHeight+2 || blobMaxBytesUpdateHeight == -1 {
+	if height <= blobMaxBytesUpdateHeight || blobMaxBytesUpdateHeight == -1 {
 		return nil, false
 	}
 	switch height % 4 {
@@ -222,11 +222,10 @@ func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto
 		app.logger.Info("updating blob max bytes on the fly",
 			"current_height", currentHeight,
 			"blob_max_bytes_update_height", app.cfg.BlobMaxBytesUpdateHeight)
-		params = &cmtproto.ConsensusParams{
-			Blob: &cmtproto.BlobParams{
-				MaxBytes: cmttypes.MaxBlobSizeBytes,
-			},
+		params.Blob = &cmtproto.BlobParams{
+			MaxBytes: cmttypes.MaxBlobSizeBytes,
 		}
+
 		app.logger.Info("updating blob max bytes in app_state", "height", app.cfg.BlobMaxBytesUpdateHeight)
 		app.state.Set(prefixReservedKey+suffixBlobMaxBytes, strconv.FormatInt(app.cfg.BlobMaxBytesUpdateHeight, 10))
 	}
@@ -311,7 +310,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 // It returns a boolean indicating if a blob exists (either retrieved from the simaulted network or from the
 // local cache) and the blob itself.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
-	if height <= app.cfg.BlobMaxBytesUpdateHeight+2 || app.cfg.BlobMaxBytesUpdateHeight == -1 {
+	if height <= app.cfg.BlobMaxBytesUpdateHeight || app.cfg.BlobMaxBytesUpdateHeight == -1 {
 		// Blob max bytes is still 0 so we cannot send a blob
 		return nil, false, nil
 	}
