@@ -184,16 +184,13 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 		ExperimentalMaxGossipConnectionsToPersistentPeers:    manifest.ExperimentalMaxGossipConnectionsToPersistentPeers,
 		ExperimentalMaxGossipConnectionsToNonPersistentPeers: manifest.ExperimentalMaxGossipConnectionsToNonPersistentPeers,
 		BlobMaxBytesUpdateHeight:                             manifest.BlobMaxBytesUpdateHeight,
+		BlobMaxBytes:                                         manifest.BlobMaxBytes,
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
 	}
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
-	} else {
-		if testnet.BlobMaxBytesUpdateHeight != -1 {
-			testnet.BlobMaxBytesUpdateHeight = testnet.BlobMaxBytesUpdateHeight + testnet.InitialHeight
-		}
 	}
 
 	if testnet.ABCIProtocol == "" {
@@ -367,6 +364,9 @@ func (t Testnet) Validate() error {
 	if t.BlobMaxBytes > types.MaxBlobSizeBytes {
 		return fmt.Errorf("value of BlobMaxBytes cannot be higher than %d", types.MaxBlobSizeBytes)
 	}
+	if t.BlobMaxBytes < 0 {
+		return fmt.Errorf("value of BlobMaxBytes cannot be less than 0: %d", types.MaxBlobSizeBytes)
+	}
 	if t.VoteExtensionsUpdateHeight < -1 {
 		return fmt.Errorf("value of VoteExtensionsUpdateHeight must be positive, 0 (InitChain), "+
 			"or -1 (Genesis); update height %d", t.VoteExtensionsUpdateHeight)
@@ -398,10 +398,19 @@ func (t Testnet) Validate() error {
 			)
 		}
 	}
-
-	if !(t.BlobMaxBytesUpdateHeight == -1 || t.BlobMaxBytesUpdateHeight == t.InitialHeight || t.BlobMaxBytesUpdateHeight == t.InitialHeight+10) {
-		return fmt.Errorf("the value of BlobMaxBytesUpdateHeight must be either -1 (disabled) , 0 (InitChain) or 10(height 10): %d ", t.BlobMaxBytesUpdateHeight)
+	if t.BlobMaxBytesUpdateHeight < -1 {
+		return fmt.Errorf("value of BlobMaxBytesUpdateHeight must be positive, 0 (InitChain), "+
+			"or -1 (Genesis); update height %d", t.BlobMaxBytesUpdateHeight)
 	}
+
+	if t.BlobMaxBytesUpdateHeight > 0 && t.BlobMaxBytesUpdateHeight < t.InitialHeight {
+		return fmt.Errorf("a value of BlobMaxBytesUpdateHeight greater than 0 "+
+			"must not be less than InitialHeight; "+
+			"update height %d, initial height %d",
+			t.BlobMaxBytesUpdateHeight, t.InitialHeight,
+		)
+	}
+
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {
 			return fmt.Errorf("invalid node %q: %w", node.Name, err)
