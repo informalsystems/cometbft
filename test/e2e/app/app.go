@@ -217,7 +217,7 @@ func (app *Application) Info(context.Context, *abci.RequestInfo) (*abci.Response
 	}, nil
 }
 
-// Expeected to be called with params set
+// Expected to be called with params set
 func (app *Application) updateBlobMaxBytes(currentHeight int64, params *cmtproto.ConsensusParams) *cmtproto.ConsensusParams {
 	if params == nil {
 		params = &cmtproto.ConsensusParams{}
