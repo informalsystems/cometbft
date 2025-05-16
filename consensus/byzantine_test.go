@@ -304,7 +304,7 @@ func TestByzantineConflictingProposalsWithPartition(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	app := newKVStore
+	app := newKVStoreWithBlob
 	css, cleanup := randConsensusNet(t, N, "consensus_byzantine_test", newMockTickerFunc(false), app)
 	defer cleanup()
 
@@ -353,6 +353,7 @@ func TestByzantineConflictingProposalsWithPartition(t *testing.T) {
 		require.NoError(t, err)
 
 		conR := NewReactor(css[i], true) // so we don't start the consensus states
+		conR.conS.state.ConsensusParams.Blob.MaxBytes = types.MaxBlobSizeBytes
 		conR.SetLogger(logger.With("validator", i))
 		conR.SetEventBus(eventBus)
 
