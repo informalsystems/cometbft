@@ -596,7 +596,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 	r := &abci.Request{Value: &abci.Request_ProcessProposal{ProcessProposal: &abci.RequestProcessProposal{}}}
 	app.logger.Info("ABCIRequest", "request", r)
 	if app.checkBlobHeight(req.Height, "ProcessProposal") {
-		fmt.Println("BLOB: ", req.Blob)
+		app.logger.Debug("Blob: ", req.Blob)
 
 		if !VerifyBlob(req.Height, req.Blob, app.cfg.BlobMaxBytesUpdateHeight) {
 			app.logger.Error("invalid blob, rejecting proposal", "received height", req.Height, "received", req.Blob)
