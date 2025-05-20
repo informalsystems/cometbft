@@ -119,7 +119,8 @@ func DefaultBlockParams() BlockParams {
 // DefaultBlobParams returns a default BlobParams.
 func DefaultBlobParams() BlobParams {
 	return BlobParams{
-		MaxBytes: 819200, // 800kB
+		MaxBytes: 0, // 0 bytes means no blob. To use the blob feature
+		// there needs to be a government proposal to set this to some other value
 	}
 }
 

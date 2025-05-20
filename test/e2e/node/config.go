@@ -26,6 +26,8 @@ type Config struct {
 	KeyType                    string                      `toml:"key_type"`
 	VoteExtensionsEnableHeight int64                       `toml:"vote_extensions_enable_height"`
 	VoteExtensionsUpdateHeight int64                       `toml:"vote_extensions_update_height"`
+	BlobMaxBytesUpdateHeight   int64                       `toml:"blob_max_bytes_update_height"`
+	BlobMaxBytes               int64                       `toml:"blob_max_bytes"`
 }
 
 // App extracts out the application specific configuration parameters
@@ -39,6 +41,8 @@ func (cfg *Config) App() *app.Config {
 		PersistInterval:            cfg.PersistInterval,
 		VoteExtensionsEnableHeight: cfg.VoteExtensionsEnableHeight,
 		VoteExtensionsUpdateHeight: cfg.VoteExtensionsUpdateHeight,
+		BlobMaxBytesUpdateHeight:   cfg.BlobMaxBytesUpdateHeight,
+		BlobMaxBytes:               cfg.BlobMaxBytes,
 	}
 }
 

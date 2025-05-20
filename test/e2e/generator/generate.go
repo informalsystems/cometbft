@@ -11,6 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	e2e "github.com/cometbft/cometbft/test/e2e/pkg"
+	"github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -62,6 +63,8 @@ var (
 	voteExtensionUpdateHeight = uniformChoice{int64(-1), int64(0), int64(1)} // -1: genesis, 0: InitChain, 1: (use offset)
 	voteExtensionEnabled      = weightedChoice{true: 3, false: 1}
 	voteExtensionHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
+	blobMaxBytesUpdateHeight  = uniformChoice{int64(-1), int64(0), int64(1)}
+	blobHeightOffset          = uniformChoice{int64(0), int64(10), int64(100)}
 )
 
 type generateConfig struct {
@@ -157,6 +160,16 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}, upgradeVersion st
 		manifest.VoteExtensionsEnableHeight = baseHeight + voteExtensionHeightOffset.Choose(r).(int64)
 	}
 
+	manifest.BlobMaxBytesUpdateHeight = blobMaxBytesUpdateHeight.Choose(r).(int64)
+
+	if manifest.BlobMaxBytesUpdateHeight == 1 {
+		manifest.BlobMaxBytesUpdateHeight = manifest.InitialHeight + blobHeightOffset.Choose(r).(int64)
+		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
+	}
+
+	if manifest.BlobMaxBytesUpdateHeight == 0 {
+		manifest.BlobMaxBytes = types.MaxBlobSizeBytes
+	}
 	var numSeeds, numValidators, numFulls, numLightClients int
 	switch opt["topology"].(string) {
 	case "single":

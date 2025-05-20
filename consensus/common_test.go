@@ -513,13 +513,13 @@ func loadPrivValidator(config *cfg.Config) *privval.FilePV {
 }
 
 func randState(nValidators int) (*State, []*validatorStub) {
-	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication())
+	return randStateWithApp(nValidators, kvstore.NewInMemoryApplication(), false)
 }
 
 func randStateWithBlob(nValidators int) (*State, []*validatorStub) {
 	app := kvstore.NewInMemoryApplication()
 	app.SetGenerateBlobs()
-	return randStateWithApp(nValidators, app)
+	return randStateWithApp(nValidators, app, true)
 }
 
 func randStateWithAppWithHeight(
@@ -531,8 +531,11 @@ func randStateWithAppWithHeight(
 	c.ABCI.VoteExtensionsEnableHeight = height
 	return randStateWithAppImpl(nValidators, app, c)
 }
-func randStateWithApp(nValidators int, app abci.Application) (*State, []*validatorStub) {
+func randStateWithApp(nValidators int, app abci.Application, blob bool) (*State, []*validatorStub) {
 	c := test.ConsensusParams()
+	if blob {
+		c.Blob.MaxBytes = 100
+	}
 	return randStateWithAppImpl(nValidators, app, c)
 }
 
@@ -877,6 +880,7 @@ func randConsensusNetWithPeers(
 	appFunc func(string) abci.Application,
 ) ([]*State, *types.GenesisDoc, *cfg.Config, cleanupFunc) {
 	c := test.ConsensusParams()
+	c.Blob.MaxBytes = 100
 	genDoc, privVals := randGenesisDoc(nValidators, false, testMinPower, c)
 	css := make([]*State, nPeers)
 	logger := consensusLogger()

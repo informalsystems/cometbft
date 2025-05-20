@@ -98,11 +98,6 @@ type Manifest struct {
 	// BlockMaxBytes specifies the maximum size in bytes of a block. This
 	// value will be written to the genesis file of all nodes.
 	BlockMaxBytes int64 `toml:"block_max_bytes"`
-
-	// BlobMaxBytes specifies the maximum size in bytes of a blob. This
-	// value will be written to the genesis file of all nodes.
-	BlobMaxBytes int64 `toml:"blob_max_bytes"`
-
 	// VoteExtensionsEnableHeight configures the first height during which
 	// the chain will use and require vote extension data to be present
 	// in precommit messages.
@@ -116,6 +111,17 @@ type Manifest struct {
 	// Maximum number of peers to which the node gossips transactions
 	ExperimentalMaxGossipConnectionsToPersistentPeers    uint `toml:"experimental_max_gossip_connections_to_persistent_peers"`
 	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint `toml:"experimental_max_gossip_connections_to_non_persistent_peers"`
+
+	// BlobMaxBytesUpdateHeight configures the height at which the
+	// blob max bytes consensus parameters are updated
+	// -1 means the max_bytes value is set at genesis
+	// 0 means the max_bytes value is set at InitChain
+	// >0 means the max_bytes value is set at the given height
+	BlobMaxBytesUpdateHeight int64 `toml:"blob_max_bytes_update_height"`
+
+	// BlobMaxBytes specifies the maximum size in bytes of a blob. This
+	// value will be written to the genesis file of all nodes.
+	BlobMaxBytes int64 `toml:"blob_max_bytes"`
 }
 
 // ManifestNode represents a node in a testnet manifest.

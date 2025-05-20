@@ -421,8 +421,8 @@ func TestReactorRecordsVotesAndBlockPartsAndBlobParts(t *testing.T) {
 	n := 4
 
 	css, _, _, cleanup := randConsensusNetWithPeers(t, n, n, "consensus_reactor_test", newMockTickerFunc(true), newPersistentKVStoreWithPathAndBlob)
-
 	defer cleanup()
+
 	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, n)
 	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 

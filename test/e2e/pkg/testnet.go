@@ -93,11 +93,12 @@ type Testnet struct {
 	LogFormat                                            string
 	Prometheus                                           bool
 	BlockMaxBytes                                        int64
-	BlobMaxBytes                                         int64
 	VoteExtensionsEnableHeight                           int64
 	VoteExtensionsUpdateHeight                           int64
 	ExperimentalMaxGossipConnectionsToPersistentPeers    uint
 	ExperimentalMaxGossipConnectionsToNonPersistentPeers uint
+	BlobMaxBytesUpdateHeight                             int64
+	BlobMaxBytes                                         int64
 }
 
 // Node represents a CometBFT node in a testnet.
@@ -182,6 +183,8 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 		VoteExtensionsUpdateHeight: manifest.VoteExtensionsUpdateHeight,
 		ExperimentalMaxGossipConnectionsToPersistentPeers:    manifest.ExperimentalMaxGossipConnectionsToPersistentPeers,
 		ExperimentalMaxGossipConnectionsToNonPersistentPeers: manifest.ExperimentalMaxGossipConnectionsToNonPersistentPeers,
+		BlobMaxBytesUpdateHeight:                             manifest.BlobMaxBytesUpdateHeight,
+		BlobMaxBytes:                                         manifest.BlobMaxBytes,
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
@@ -189,6 +192,7 @@ func NewTestnetFromManifest(manifest Manifest, file string, ifd InfrastructureDa
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
 	}
+
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = string(ProtocolBuiltin)
 	}
@@ -360,6 +364,9 @@ func (t Testnet) Validate() error {
 	if t.BlobMaxBytes > types.MaxBlobSizeBytes {
 		return fmt.Errorf("value of BlobMaxBytes cannot be higher than %d", types.MaxBlobSizeBytes)
 	}
+	if t.BlobMaxBytes < 0 {
+		return fmt.Errorf("value of BlobMaxBytes cannot be less than 0: %d", types.MaxBlobSizeBytes)
+	}
 	if t.VoteExtensionsUpdateHeight < -1 {
 		return fmt.Errorf("value of VoteExtensionsUpdateHeight must be positive, 0 (InitChain), "+
 			"or -1 (Genesis); update height %d", t.VoteExtensionsUpdateHeight)
@@ -391,6 +398,19 @@ func (t Testnet) Validate() error {
 			)
 		}
 	}
+	if t.BlobMaxBytesUpdateHeight < -1 {
+		return fmt.Errorf("value of BlobMaxBytesUpdateHeight must be positive, 0 (InitChain), "+
+			"or -1 (Genesis); update height %d", t.BlobMaxBytesUpdateHeight)
+	}
+
+	if t.BlobMaxBytesUpdateHeight > 0 && t.BlobMaxBytesUpdateHeight < t.InitialHeight {
+		return fmt.Errorf("a value of BlobMaxBytesUpdateHeight greater than 0 "+
+			"must not be less than InitialHeight; "+
+			"update height %d, initial height %d",
+			t.BlobMaxBytesUpdateHeight, t.InitialHeight,
+		)
+	}
+
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {
 			return fmt.Errorf("invalid node %q: %w", node.Name, err)

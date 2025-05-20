@@ -140,11 +140,12 @@ func MakeGenesis(testnet *e2e.Testnet) (types.GenesisDoc, error) {
 	if testnet.BlockMaxBytes != 0 {
 		genesis.ConsensusParams.Block.MaxBytes = testnet.BlockMaxBytes
 	}
-	if testnet.BlobMaxBytes != 0 {
-		genesis.ConsensusParams.Blob.MaxBytes = testnet.BlobMaxBytes
-	}
 	if testnet.VoteExtensionsUpdateHeight == -1 {
 		genesis.ConsensusParams.ABCI.VoteExtensionsEnableHeight = testnet.VoteExtensionsEnableHeight
+	}
+	// If this is not explicitly set it defaults to 0 which means blobs are disabled
+	if testnet.BlobMaxBytesUpdateHeight == -1 {
+		genesis.ConsensusParams.Blob.MaxBytes = testnet.BlobMaxBytes
 	}
 	for validator, power := range testnet.Validators {
 		genesis.Validators = append(genesis.Validators, types.GenesisValidator{
@@ -292,6 +293,8 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		"finalize_block_delay":          node.Testnet.FinalizeBlockDelay,
 		"vote_extensions_enable_height": node.Testnet.VoteExtensionsEnableHeight,
 		"vote_extensions_update_height": node.Testnet.VoteExtensionsUpdateHeight,
+		"blob_max_bytes_update_height":  node.Testnet.BlobMaxBytesUpdateHeight,
+		"blob_max_bytes":                node.Testnet.BlobMaxBytes,
 	}
 	switch node.ABCIProtocol {
 	case e2e.ProtocolUNIX:

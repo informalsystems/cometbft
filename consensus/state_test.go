@@ -1655,7 +1655,7 @@ func TestProcessProposalAccept(t *testing.T) {
 			}
 			m.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{Status: status}, nil)
 			m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{}, nil).Maybe()
-			cs1, _ := randStateWithApp(4, m)
+			cs1, _ := randStateWithApp(4, m, false)
 			height, round := cs1.Height, cs1.Round
 
 			proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
@@ -1796,7 +1796,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	}, nil)
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 	m.On("Commit", mock.Anything, mock.Anything).Return(&abci.ResponseCommit{}, nil).Maybe()
-	cs1, vss := randStateWithApp(4, m)
+	cs1, vss := randStateWithApp(4, m, false)
 	height, round := cs1.Height, cs1.Round
 	cs1.state.ConsensusParams.ABCI.VoteExtensionsEnableHeight = cs1.Height
 
@@ -1890,7 +1890,7 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	m.On("Commit", mock.Anything, mock.Anything).Return(&abci.ResponseCommit{}, nil).Maybe()
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil)
 
-	cs1, vss := randStateWithApp(4, m)
+	cs1, vss := randStateWithApp(4, m, false)
 	height, round := cs1.Height, cs1.Round
 
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
@@ -1994,7 +1994,7 @@ func TestFinalizeBlockCalled(t *testing.T) {
 			m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(r, nil).Maybe()
 			m.On("Commit", mock.Anything, mock.Anything).Return(&abci.ResponseCommit{}, nil).Maybe()
 
-			cs1, vss := randStateWithApp(4, m)
+			cs1, vss := randStateWithApp(4, m, false)
 			height, round := cs1.Height, cs1.Round
 
 			proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
