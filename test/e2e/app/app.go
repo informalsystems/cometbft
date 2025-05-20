@@ -319,7 +319,7 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 // local cache) and the blob itself.
 func (app *Application) GetBlob(height int64) ([]byte, bool, error) {
 	if !app.checkBlobEnabled("getBlob") {
-		// Blob max bytes is still 0 so we cannot send a blob
+		// Blob max bytes is 0 so we cannot send a blob
 		return nil, false, nil
 	}
 	// First check the local cache
