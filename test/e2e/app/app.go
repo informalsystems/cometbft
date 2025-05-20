@@ -121,7 +121,7 @@ type Config struct {
 	// >0 means the max_bytes value is set at the given height
 	BlobMaxBytesUpdateHeight int64 `toml:"blob_max_bytes_update_height"`
 
-	// BlobMaxBytes is the values of max bytes for blobs
+	// BlobMaxBytes is the value of max bytes for blobs
 	BlobMaxBytes int64 `toml:"blob_max_bytes"`
 }
 
