@@ -96,7 +96,11 @@ func (env *Environment) UnsafeDialPeers(
 
 // Genesis returns genesis file.
 // More: https://docs.cometbft.com/v0.38.x/rpc/#/Info/genesis
+//
+//nolint:govet
 func (env *Environment) Genesis(*rpctypes.Context) (*ctypes.ResultGenesis, error) {
+	return nil, errors.New("endpoint is disabled due to large genesis file size")
+
 	if len(env.genChunks) > 1 {
 		return nil, errors.New("genesis response is large, please use the genesis_chunked API instead")
 	}
@@ -104,7 +108,9 @@ func (env *Environment) Genesis(*rpctypes.Context) (*ctypes.ResultGenesis, error
 	return &ctypes.ResultGenesis{Genesis: env.GenDoc}, nil
 }
 
+//nolint:govet
 func (env *Environment) GenesisChunked(_ *rpctypes.Context, chunk uint) (*ctypes.ResultGenesisChunk, error) {
+	return nil, errors.New("endpoint is disabled due to large genesis file size")
 	if env.genChunks == nil {
 		return nil, fmt.Errorf("service configuration error, genesis chunks are not initialized")
 	}
