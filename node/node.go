@@ -682,9 +682,6 @@ func (n *Node) ConfigureRPC() (*rpccore.Environment, error) {
 
 		Config: *n.config.RPC,
 	}
-	if err := rpcCoreEnv.InitGenesisChunks(); err != nil {
-		return nil, err
-	}
 	return &rpcCoreEnv, nil
 }
 
