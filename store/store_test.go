@@ -62,20 +62,6 @@ func makeTestExtCommitWithNumSigs(height int64, timestamp time.Time, numSigs int
 	}
 }
 
-func makeStateAndBlockStore(testName string) (sm.State, *BlockStore, cleanupFunc) {
-	config := test.ResetTestRoot(testName + fmt.Sprintf("random-%d", cmtrand.Int()))
-	blockDB := dbm.NewMemDB()
-	stateDB := dbm.NewMemDB()
-	stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-		DiscardABCIResponses: false,
-	})
-	state, err := stateStore.LoadFromDBOrGenesisFile(config.GenesisFile())
-	if err != nil {
-		panic(fmt.Errorf("error constructing state from genesis file: %w", err))
-	}
-	return state, NewBlockStore(blockDB), func() { os.RemoveAll(config.RootDir) }
-}
-
 func makeStateBlockAndStateStore(testName string) (sm.State, *BlockStore, sm.Store, cleanupFunc) {
 	config := test.ResetTestRoot(testName + fmt.Sprintf("random-%d", cmtrand.Int()))
 	blockDB := dbm.NewMemDB()
@@ -164,7 +150,7 @@ func newInMemoryBlockStore() (*BlockStore, dbm.DB) {
 // TODO: This test should be simplified ...
 
 func TestBlockStoreSaveLoadBlock(t *testing.T) {
-	state, bs, cleanup := makeStateAndBlockStore("TestBlockStoreSaveLoadBlock")
+	state, bs, _, cleanup := makeStateBlockAndStateStore("TestBlockStoreSaveLoadBlock")
 	defer cleanup()
 	require.Equal(t, bs.Base(), int64(0), "initially the base should be zero")
 	require.Equal(t, bs.Height(), int64(0), "initially the height should be zero")
@@ -418,7 +404,7 @@ func TestSaveBlockWithExtendedCommitPanicOnAbsentExtension(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			state, bs, cleanup := makeStateAndBlockStore("testCase.name")
+			state, bs, _, cleanup := makeStateBlockAndStateStore("testCase.name")
 			defer cleanup()
 			h := bs.Height() + 1
 			block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
@@ -459,7 +445,7 @@ func TestLoadBlockExtendedCommit(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			state, bs, cleanup := makeStateAndBlockStore("testCase.name")
+			state, bs, _, cleanup := makeStateBlockAndStateStore("testCase.name")
 			defer cleanup()
 			h := bs.Height() + 1
 			block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
@@ -905,7 +891,7 @@ func TestLoadBlockMetaByHash(t *testing.T) {
 }
 
 func TestBlockFetchAtHeight(t *testing.T) {
-	state, bs, cleanup := makeStateAndBlockStore("TestBlockFetchAtHeight")
+	state, bs, _, cleanup := makeStateBlockAndStateStore("TestBlockFetchAtHeight")
 	defer cleanup()
 	require.Equal(t, bs.Height(), int64(0), "initially the height should be zero")
 	block := state.MakeBlock(bs.Height()+1, nil, new(types.Commit), nil, state.Validators.GetProposer().Address)
