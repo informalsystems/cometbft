@@ -311,7 +311,7 @@ func generateNode(
 		PersistInterval:        ptrUint64(uint64(nodePersistIntervals.Choose(r).(int))),
 		SnapshotInterval:       uint64(nodeSnapshotIntervals.Choose(r).(int)),
 		RetainBlocks:           uint64(nodeRetainBlocks.Choose(r).(int)),
-		EnableCompanionPruning: false,
+		EnableCompanionPruning: false, // We set it below
 		Perturb:                nodePerturbations.Choose(r),
 	}
 
