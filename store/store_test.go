@@ -76,6 +76,21 @@ func makeStateBlockAndStateStore(testName string) (sm.State, *BlockStore, sm.Sto
 	return state, NewBlockStore(blockDB), stateStore, func() { os.RemoveAll(config.RootDir) }
 }
 
+// Helper to create and save a batch of blocks (optionally updating stateStore)
+func saveBlocks(bs *BlockStore, state sm.State, stateStore sm.Store, from, to int64, updateStateStore bool) {
+	for h := from; h <= to; h++ {
+		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
+		partSet, err := block.MakePartSet(types.PartSizeBytes)
+		if err != nil {
+			panic(err)
+		}
+		seenCommit := makeTestExtCommit(h, cmttime.Now())
+		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
+		if updateStateStore && stateStore != nil {
+			stateStore.Save(state)
+		}
+	}
+}
 func TestLoadBlockStoreState(t *testing.T) {
 	type blockStoreTest struct {
 		testName string
@@ -477,13 +492,7 @@ func TestLoadBaseMeta(t *testing.T) {
 	require.NoError(t, err)
 	bs := NewBlockStore(dbm.NewMemDB())
 
-	for h := int64(1); h <= 10; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 10, true)
 
 	_, _, err = bs.PruneBlocks(4, state)
 	require.NoError(t, err)
@@ -600,15 +609,7 @@ func TestPruningService(t *testing.T) {
 	require.NoError(t, err)
 
 	// make more than 1000 blocks, to test batch deletions
-	for h := int64(1); h <= 1500; h++ {
-
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-		stateStore.Save(state)
-	}
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
 
 	assert.EqualValues(t, 1, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
@@ -749,14 +750,7 @@ func TestPruneBlocks(t *testing.T) {
 	_, _, err = bs.PruneBlocks(0, state)
 	require.Error(t, err)
 
-	// make more than 1000 blocks, to test batch deletions
-	for h := int64(1); h <= 1500; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
 
 	assert.EqualValues(t, 1, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
