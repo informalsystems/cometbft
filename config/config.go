@@ -1371,6 +1371,12 @@ func TestDataCompanionPruningConfig() *DataCompanionPruningConfig {
 }
 
 func (cfg *DataCompanionPruningConfig) ValidateBasic() error {
+	// This is only for Polygon's fork to explicitly make sure
+	// nobody accidentally enables the data companion
+	if cfg.Enabled {
+		return errors.New("data companion pruning is not supported in this version of CometBFT")
+	}
+
 	if !cfg.Enabled {
 		return nil
 	}
