@@ -12,7 +12,6 @@ import (
 	dbm "github.com/cometbft/cometbft-db"
 
 	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/internal/test"
 	"github.com/cometbft/cometbft/libs/log"
 	cmtstate "github.com/cometbft/cometbft/proto/tendermint/state"
@@ -117,22 +116,25 @@ func TestPruneStates(t *testing.T) {
 		},
 		"prune when evidence height < height": {20, 1, 18, 17, false, []int64{13, 17, 18, 19, 20}, []int64{15, 18, 19, 20}, []int64{18, 19, 20}},
 	}
+
+	finalizeBlockResults := &abci.ResponseFinalizeBlock{
+		TxResults: []*abci.ExecTxResult{
+			{Data: []byte{1}},
+			{Data: []byte{2}},
+			{Data: []byte{3}},
+		},
+		AppHash: make([]byte, 1),
+	}
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			db := dbm.NewMemDB()
-			stateStore := sm.NewStore(db, sm.StoreOptions{
-				DiscardABCIResponses: false,
-			})
-			pk := ed25519.GenPrivKey().PubKey()
+			_, _, callbackF, stateStore := makeStateAndBlockStore("TestPruneStates_" + name)
+			defer callbackF()
 
 			// Generate a bunch of state data. Validators change for heights ending with 3, and
 			// parameters when ending with 5.
-			validator := &types.Validator{Address: pk.Address(), VotingPower: 100, PubKey: pk}
-			validatorSet := &types.ValidatorSet{
-				Validators: []*types.Validator{validator},
-				Proposer:   validator,
-			}
+			validatorSet := genValSet(1)
+
 			valsChanged := int64(0)
 			paramsChanged := int64(0)
 
@@ -163,14 +165,7 @@ func TestPruneStates(t *testing.T) {
 				err := stateStore.Save(state)
 				require.NoError(t, err)
 
-				err = stateStore.SaveFinalizeBlockResponse(h, &abci.ResponseFinalizeBlock{
-					TxResults: []*abci.ExecTxResult{
-						{Data: []byte{1}},
-						{Data: []byte{2}},
-						{Data: []byte{3}},
-					},
-					AppHash: make([]byte, 1),
-				})
+				err = stateStore.SaveFinalizeBlockResponse(h, finalizeBlockResults)
 				require.NoError(t, err)
 			}
 
@@ -354,10 +349,6 @@ func TestMinRetainHeight(t *testing.T) {
 }
 
 func TestABCIResPruningStandalone(t *testing.T) {
-	// stateDB := dbm.NewMemDB()
-	// stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-	// 	DiscardABCIResponses: false,
-	// })
 	_, bs, callbackF, stateStore := makeStateAndBlockStore("TestABCIResPruningStandalone")
 	defer callbackF()
 	responses, err := stateStore.LoadFinalizeBlockResponse(1)
@@ -451,10 +442,10 @@ func (o *prunerObserver) PrunerPrunedBlocks(info *sm.BlocksPrunedInfo) {
 
 func TestFinalizeBlockResponsePruning(t *testing.T) {
 	t.Run("Persisting responses", func(t *testing.T) {
-		stateDB := dbm.NewMemDB()
-		stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-			DiscardABCIResponses: false,
-		})
+
+		_, _, callbackF, stateStore := makeStateAndBlockStore("TestFinalizeBlockResponsePruning")
+		defer callbackF()
+
 		responses, err := stateStore.LoadFinalizeBlockResponse(1)
 		require.Error(t, err)
 		require.Nil(t, responses)
