@@ -1151,6 +1151,22 @@ type StorageConfig struct {
 	DiscardABCIResponses bool `mapstructure:"discard_abci_responses"`
 	// Configuration related to storage pruning.
 	Pruning *PruningConfig `mapstructure:"pruning"`
+
+	// Compaction on pruning - enable or disable in-process compaction.
+	// If the DB backend supports it, this will force the DB to compact
+	// the database levels and save on storage space. Setting this to true
+	// is most beneficial when used in combination with pruning as it will
+	// phyisically delete the entries marked for deletion.
+	// false by default (forcing compaction is disabled).
+	Compact bool `mapstructure:"compact"`
+	// Compaction interval - number of blocks to try explicit compaction on.
+	// This parameter should be tuned depending on the number of items
+	// you expect to delete between two calls to forced compaction.
+	// If your retain height is 1 block, it is too much of an overhead
+	// to try compaction every block. But it should also not be a very
+	// large multiple of your retain height as it might occur bigger overheads.
+	// 1000 by default.
+	CompactionInterval int64 `mapstructure:"compaction_interval"`
 }
 
 // DefaultStorageConfig returns the default configuration options relating to
@@ -1159,6 +1175,8 @@ func DefaultStorageConfig() *StorageConfig {
 	return &StorageConfig{
 		DiscardABCIResponses: false,
 		Pruning:              DefaultPruningConfig(),
+		Compact:              false,
+		CompactionInterval:   1000,
 	}
 }
 
@@ -1371,6 +1389,12 @@ func TestDataCompanionPruningConfig() *DataCompanionPruningConfig {
 }
 
 func (cfg *DataCompanionPruningConfig) ValidateBasic() error {
+	// This is only for Polygon's fork to explicitly make sure
+	// nobody accidentally enables the data companion
+	if cfg.Enabled {
+		return errors.New("data companion pruning is not supported in this version of CometBFT")
+	}
+
 	if !cfg.Enabled {
 		return nil
 	}

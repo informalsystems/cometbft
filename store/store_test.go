@@ -32,6 +32,12 @@ import (
 	"github.com/cometbft/cometbft/version"
 )
 
+// A cleanupFunc cleans up any config / test files created for a particular
+// test.
+type cleanupFunc func()
+
+var heightChangedErrorStr = "expected the new height to be changed"
+
 // make an extended commit with a single vote containing just the height and a
 // timestamp
 func makeTestExtCommit(height int64, timestamp time.Time) *types.ExtendedCommit {
@@ -82,6 +88,21 @@ func makeStateAndBlockStoreAndIndexers(testName string) (sm.State, *BlockStore, 
 	return state, NewBlockStore(blockDB), txIndexer, blockIndexer, func() { os.RemoveAll(config.RootDir) }, stateStore
 }
 
+// Helper to create and save a batch of blocks (optionally updating stateStore)
+func saveBlocks(bs *BlockStore, state sm.State, stateStore sm.Store, from, to int64, updateStateStore bool) {
+	for h := from; h <= to; h++ {
+		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
+		partSet, err := block.MakePartSet(types.PartSizeBytes)
+		if err != nil {
+			panic(err)
+		}
+		seenCommit := makeTestExtCommit(h, cmttime.Now())
+		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
+		if updateStateStore && stateStore != nil {
+			stateStore.Save(state)
+		}
+	}
+}
 func TestLoadBlockStoreState(t *testing.T) {
 	type blockStoreTest struct {
 		testName string
@@ -154,7 +175,6 @@ func newInMemoryBlockStore() (*BlockStore, dbm.DB) {
 }
 
 // TODO: This test should be simplified ...
-
 func TestBlockStoreSaveLoadBlock(t *testing.T) {
 	state, bs, _, _, cleanup, _ := makeStateAndBlockStoreAndIndexers("TestBlockStoreSaveLoadBlock")
 	defer cleanup()
@@ -179,8 +199,8 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 
 	seenCommit := makeTestExtCommit(block.Header.Height, cmttime.Now())
 	bs.SaveBlockWithExtendedCommit(block, validPartSet, seenCommit)
-	require.EqualValues(t, 1, bs.Base(), "expecting the new height to be changed")
-	require.EqualValues(t, block.Header.Height, bs.Height(), "expecting the new height to be changed")
+	require.EqualValues(t, 1, bs.Base(), heightChangedErrorStr)
+	require.EqualValues(t, block.Header.Height, bs.Height(), heightChangedErrorStr)
 
 	incompletePartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 2})
 	uncontiguousPartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 0})
@@ -483,13 +503,7 @@ func TestLoadBaseMeta(t *testing.T) {
 	require.NoError(t, err)
 	bs := NewBlockStore(dbm.NewMemDB())
 
-	for h := int64(1); h <= 10; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 10, true)
 
 	_, _, err = bs.PruneBlocks(4, state)
 	require.NoError(t, err)
@@ -572,6 +586,14 @@ func (o *prunerObserver) PrunerPrunedBlocks(info *sm.BlocksPrunedInfo) {
 	o.prunedBlocksResInfoCh <- info
 }
 
+func genValSet(size int) *types.ValidatorSet {
+	vals := make([]*types.Validator, size)
+	for i := 0; i < size; i++ {
+		vals[i] = types.NewValidator(ed25519.GenPrivKey().PubKey(), 10)
+	}
+	return types.NewValidatorSet(vals)
+}
+
 // This test tests the pruning service and its pruning of the blockstore
 // The state store cannot be pruned here because we do not have proper
 // state stored. The test is expected to pass even though the log should
@@ -606,15 +628,7 @@ func TestPruningService(t *testing.T) {
 	require.NoError(t, err)
 
 	// make more than 1000 blocks, to test batch deletions
-	for h := int64(1); h <= 1500; h++ {
-
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-		stateStore.Save(state)
-	}
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
 
 	assert.EqualValues(t, 1, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
@@ -626,16 +640,12 @@ func TestPruningService(t *testing.T) {
 	state.ConsensusParams.Evidence.MaxAgeNumBlocks = 400
 	state.ConsensusParams.Evidence.MaxAgeDuration = 1 * time.Second
 
-	pk := ed25519.GenPrivKey().PubKey()
-
 	// Generate a bunch of state data.
 	// This is needed because the pruning is expecting to load the state from the database thus
 	// We have to have acceptable values for all fields of the state
-	validator := &types.Validator{Address: pk.Address(), VotingPower: 100, PubKey: pk}
-	validatorSet := &types.ValidatorSet{
-		Validators: []*types.Validator{validator},
-		Proposer:   validator,
-	}
+
+	validatorSet := genValSet(1)
+
 	state.Validators = validatorSet
 	state.NextValidators = validatorSet
 	if state.LastBlockHeight >= 1 {
@@ -754,14 +764,7 @@ func TestPruneBlocks(t *testing.T) {
 	_, _, err = bs.PruneBlocks(0, state)
 	require.Error(t, err)
 
-	// make more than 1000 blocks, to test batch deletions
-	for h := int64(1); h <= 1500; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
 
 	assert.EqualValues(t, 1, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
@@ -907,7 +910,7 @@ func TestBlockFetchAtHeight(t *testing.T) {
 	require.NoError(t, err)
 	seenCommit := makeTestExtCommit(block.Header.Height, cmttime.Now())
 	bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	require.Equal(t, bs.Height(), block.Header.Height, "expecting the new height to be changed")
+	require.Equal(t, bs.Height(), block.Header.Height, heightChangedErrorStr)
 
 	blockAtHeight := bs.LoadBlock(bs.Height())
 	b1, err := block.ToProto()
