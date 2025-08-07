@@ -38,8 +38,8 @@ type Pruner struct {
 	interval     time.Duration
 	observer     PrunerObserver
 	metrics      *Metrics
-	// Preserve the number of state entries pruned.
-	// Used to calculated correctly when to trigger compactions
+
+	// TODO Depracate this in v2. This is now counted within the store
 	prunedStates uint64
 }
 
@@ -515,12 +515,11 @@ func (p *Pruner) pruneBlocksToHeight(height int64) (uint64, int64, error) {
 	}
 
 	if pruned > 0 {
-		prunedStates, err := p.stateStore.PruneStates(base, height, evRetainHeight, p.prunedStates)
-		p.prunedStates += prunedStates
+
+		p.prunedStates, err = p.stateStore.PruneStates(base, height, evRetainHeight, p.prunedStates)
 		if err != nil {
 			return 0, 0, ErrFailedToPruneStates{Height: height, Err: err}
 		}
-
 	}
 	return pruned, evRetainHeight, err
 }

@@ -121,6 +121,10 @@ type StoreOptions struct {
 	Compact bool
 
 	CompactionInterval int64
+
+	ResultsToCompact uint64
+
+	StatesToCompact uint64
 }
 
 var _ Store = (*dbStore)(nil)
@@ -423,13 +427,17 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 	if err != nil {
 		return pruned, err
 	}
+	store.StoreOptions.StatesToCompact += uint64(pruned)
 
 	// We do not want to panic or interrupt consensus on compaction failure
-	if store.StoreOptions.Compact && previosulyPrunedStates+pruned >= uint64(store.StoreOptions.CompactionInterval) {
+	if store.StoreOptions.Compact && store.StoreOptions.StatesToCompact >= uint64(store.StoreOptions.CompactionInterval) {
 		// When the range is nil,nil, the database will try to compact
 		// ALL levels. Another option is to set a predefined range of
 		// specific keys.
 		err = store.db.Compact(nil, nil)
+		if err == nil {
+			store.StoreOptions.StatesToCompact = 0
+		}
 	}
 
 	return pruned, nil
@@ -481,9 +489,11 @@ func (store dbStore) PruneABCIResponses(targetRetainHeight int64, forceCompact b
 		return pruned + batchPruned, targetRetainHeight, err
 	}
 
-	if forceCompact && store.Compact {
-		if pruned+batchPruned >= store.CompactionInterval || targetRetainHeight-lastRetainHeight >= store.CompactionInterval {
-			err = store.db.Compact(nil, nil)
+	store.StoreOptions.ResultsToCompact += uint64(pruned + batchPruned)
+	if forceCompact && store.Compact && store.StoreOptions.ResultsToCompact >= (uint64)(store.StoreOptions.CompactionInterval) {
+		err = store.db.Compact(nil, nil)
+		if err == nil {
+			store.StoreOptions.ResultsToCompact = 0
 		}
 	}
 	return pruned + batchPruned, targetRetainHeight, err
