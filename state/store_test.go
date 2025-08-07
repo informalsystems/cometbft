@@ -86,6 +86,53 @@ func BenchmarkLoadValidators(b *testing.B) {
 	}
 }
 
+func makeAndSaveStates(t *testing.T, fromHeight int64, toHeight int64, stateStore sm.Store) {
+
+	finalizeBlockResults := &abci.ResponseFinalizeBlock{
+		TxResults: []*abci.ExecTxResult{
+			{Data: []byte{1}},
+			{Data: []byte{2}},
+			{Data: []byte{3}},
+		},
+		AppHash: make([]byte, 1),
+	}
+
+	validatorSet := genValSet(1)
+
+	valsChanged := int64(0)
+	paramsChanged := int64(0)
+
+	for h := fromHeight; h <= toHeight; h++ {
+		if valsChanged == 0 || h%10 == 2 {
+			valsChanged = h + 1 // Have to add 1, since NextValidators is what's stored
+		}
+		if paramsChanged == 0 || h%10 == 5 {
+			paramsChanged = h
+		}
+
+		state := sm.State{
+			InitialHeight:   1,
+			LastBlockHeight: h - 1,
+			Validators:      validatorSet,
+			NextValidators:  validatorSet,
+			ConsensusParams: types.ConsensusParams{
+				Block: types.BlockParams{MaxBytes: 10e6},
+			},
+			LastHeightValidatorsChanged:      valsChanged,
+			LastHeightConsensusParamsChanged: paramsChanged,
+		}
+
+		if state.LastBlockHeight >= 1 {
+			state.LastValidators = state.Validators
+		}
+
+		err := stateStore.Save(state)
+		require.NoError(t, err)
+
+		err = stateStore.SaveFinalizeBlockResponse(h, finalizeBlockResults)
+		require.NoError(t, err)
+	}
+}
 func TestPruneStates(t *testing.T) {
 	testcases := map[string]struct {
 		makeHeights             int64
@@ -117,14 +164,6 @@ func TestPruneStates(t *testing.T) {
 		"prune when evidence height < height": {20, 1, 18, 17, false, []int64{13, 17, 18, 19, 20}, []int64{15, 18, 19, 20}, []int64{18, 19, 20}},
 	}
 
-	finalizeBlockResults := &abci.ResponseFinalizeBlock{
-		TxResults: []*abci.ExecTxResult{
-			{Data: []byte{1}},
-			{Data: []byte{2}},
-			{Data: []byte{3}},
-		},
-		AppHash: make([]byte, 1),
-	}
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
@@ -133,41 +172,7 @@ func TestPruneStates(t *testing.T) {
 
 			// Generate a bunch of state data. Validators change for heights ending with 3, and
 			// parameters when ending with 5.
-			validatorSet := genValSet(1)
-
-			valsChanged := int64(0)
-			paramsChanged := int64(0)
-
-			for h := int64(1); h <= tc.makeHeights; h++ {
-				if valsChanged == 0 || h%10 == 2 {
-					valsChanged = h + 1 // Have to add 1, since NextValidators is what's stored
-				}
-				if paramsChanged == 0 || h%10 == 5 {
-					paramsChanged = h
-				}
-
-				state := sm.State{
-					InitialHeight:   1,
-					LastBlockHeight: h - 1,
-					Validators:      validatorSet,
-					NextValidators:  validatorSet,
-					ConsensusParams: types.ConsensusParams{
-						Block: types.BlockParams{MaxBytes: 10e6},
-					},
-					LastHeightValidatorsChanged:      valsChanged,
-					LastHeightConsensusParamsChanged: paramsChanged,
-				}
-
-				if state.LastBlockHeight >= 1 {
-					state.LastValidators = state.Validators
-				}
-
-				err := stateStore.Save(state)
-				require.NoError(t, err)
-
-				err = stateStore.SaveFinalizeBlockResponse(h, finalizeBlockResults)
-				require.NoError(t, err)
-			}
+			makeAndSaveStates(t, 1, tc.makeHeights, stateStore)
 
 			// Test assertions
 			_, err := stateStore.PruneStates(tc.pruneFrom, tc.pruneTo, tc.evidenceThresholdHeight, 0)
@@ -245,6 +250,8 @@ func makeStateAndBlockStore(testName string) (sm.State, *store.BlockStore, func(
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB, sm.StoreOptions{
 		DiscardABCIResponses: false,
+		Compact:              true,
+		CompactionInterval:   1,
 	})
 	state, err := stateStore.LoadFromDBOrGenesisFile(config.GenesisFile())
 	if err != nil {
