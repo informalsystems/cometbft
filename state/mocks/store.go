@@ -401,9 +401,9 @@ func (_m *Store) PruneABCIResponses(targetRetainHeight int64, forceCompact bool)
 	return r0, r1, r2
 }
 
-// PruneStates provides a mock function with given fields: fromHeight, toHeight, evidenceThresholdHeight, previouslyPrunedStates
-func (_m *Store) PruneStates(fromHeight int64, toHeight int64, evidenceThresholdHeight int64, previouslyPrunedStates uint64) (uint64, error) {
-	ret := _m.Called(fromHeight, toHeight, evidenceThresholdHeight, previouslyPrunedStates)
+// PruneStates provides a mock function with given fields: fromHeight, toHeight, evidenceThresholdHeight
+func (_m *Store) PruneStates(fromHeight int64, toHeight int64, evidenceThresholdHeight int64) (uint64, error) {
+	ret := _m.Called(fromHeight, toHeight, evidenceThresholdHeight)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PruneStates")
@@ -411,17 +411,17 @@ func (_m *Store) PruneStates(fromHeight int64, toHeight int64, evidenceThreshold
 
 	var r0 uint64
 	var r1 error
-	if rf, ok := ret.Get(0).(func(int64, int64, int64, uint64) (uint64, error)); ok {
-		return rf(fromHeight, toHeight, evidenceThresholdHeight, previouslyPrunedStates)
+	if rf, ok := ret.Get(0).(func(int64, int64, int64) (uint64, error)); ok {
+		return rf(fromHeight, toHeight, evidenceThresholdHeight)
 	}
-	if rf, ok := ret.Get(0).(func(int64, int64, int64, uint64) uint64); ok {
-		r0 = rf(fromHeight, toHeight, evidenceThresholdHeight, previouslyPrunedStates)
+	if rf, ok := ret.Get(0).(func(int64, int64, int64) uint64); ok {
+		r0 = rf(fromHeight, toHeight, evidenceThresholdHeight)
 	} else {
 		r0 = ret.Get(0).(uint64)
 	}
 
-	if rf, ok := ret.Get(1).(func(int64, int64, int64, uint64) error); ok {
-		r1 = rf(fromHeight, toHeight, evidenceThresholdHeight, previouslyPrunedStates)
+	if rf, ok := ret.Get(1).(func(int64, int64, int64) error); ok {
+		r1 = rf(fromHeight, toHeight, evidenceThresholdHeight)
 	} else {
 		r1 = ret.Error(1)
 	}

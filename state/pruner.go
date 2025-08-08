@@ -40,6 +40,7 @@ type Pruner struct {
 
 	// Preserve the number of state entries pruned.
 	// Used to calculated correctly when to trigger compactions
+	// TODO This is unused and should be removed from V1 and main as well.
 	prunedStates uint64
 }
 
@@ -370,7 +371,7 @@ func (p *Pruner) pruneBlocksToHeight(height int64) (uint64, int64, error) {
 
 	if pruned > 0 {
 
-		p.prunedStates, err = p.stateStore.PruneStates(base, height, evRetainHeight, p.prunedStates)
+		_, err = p.stateStore.PruneStates(base, height, evRetainHeight)
 		if err != nil {
 			return 0, 0, ErrFailedToPruneStates{Height: height, Err: err}
 		}
