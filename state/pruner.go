@@ -135,10 +135,10 @@ func (p *Pruner) OnStart() error {
 	go p.pruneBlocks()
 	// We only care about pruning ABCI results if the data companion has been
 	// enabled.
-	if p.dcEnabled {
-		go p.pruneABCIResponses()
-		go p.pruneIndexesRoutine()
-	}
+	// TODO - in main and v1 this is enabled only if the data companion is attached
+	// if p.dcEnabled {
+	go p.pruneABCIResponses()
+	//}
 	p.observer.PrunerStarted(p.interval)
 	return nil
 }
