@@ -179,7 +179,7 @@ func TestPruneStates(t *testing.T) {
 			makeAndSaveStates(t, 1, tc.makeHeights, stateStore)
 
 			// Test assertions
-			_, err := stateStore.PruneStates(tc.pruneFrom, tc.pruneTo, tc.evidenceThresholdHeight, 0)
+			_, err := stateStore.PruneStates(tc.pruneFrom, tc.pruneTo, tc.evidenceThresholdHeight)
 			if tc.expectErr {
 				require.Error(t, err)
 				return
