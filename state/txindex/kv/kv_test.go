@@ -129,12 +129,18 @@ func TestTxIndex_Prune(t *testing.T) {
 	keys2 := GetKeys(indexer)
 	assert.True(t, isSubset(keys1, keys2))
 
+	batch2 := indexer.store.NewBatch()
+	indexer.setIndexerRetainHeight(2, batch2)
+	batch2.WriteSync()
+	defer batch2.Close()
+
 	numPruned, retainedHeight, err := indexer.Prune(2)
 	assert.NoError(t, err)
 	assert.Equal(t, int64(1), numPruned)
 	assert.Equal(t, int64(2), retainedHeight)
 
 	keys3 := GetKeys(indexer)
+
 	assert.True(t, isEqualSets(setDiff(keys2, keys1), setDiff(keys3, metaKeys)))
 	assert.True(t, emptyIntersection(keys1, keys3))
 

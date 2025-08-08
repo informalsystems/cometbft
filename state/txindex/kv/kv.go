@@ -49,6 +49,112 @@ type TxIndex struct {
 }
 
 func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
+	lastRetainHeight, err := txi.getIndexerRetainHeight()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to look up last block indexer retain height: %w", err)
+	}
+	if lastRetainHeight == 0 {
+		lastRetainHeight = 1
+	}
+
+	batch := txi.store.NewBatch()
+	closeBatch := func(batch dbm.Batch) {
+		err := batch.Close()
+		if err != nil {
+			txi.log.Error(fmt.Sprintf("Error when closing block indexer pruning batch: %v", err))
+		}
+	}
+	defer closeBatch(batch)
+
+	flush := func(batch dbm.Batch) error {
+		err := batch.WriteSync()
+		if err != nil {
+			return fmt.Errorf("failed to flush block indexer pruning batch %w", err)
+		}
+		err = batch.Close()
+		if err != nil {
+			txi.log.Error(fmt.Sprintf("Error when closing block indexer pruning batch: %v", err))
+		}
+		return nil
+	}
+
+	itr, err := txi.store.Iterator(nil, nil)
+	if err != nil {
+		return 0, lastRetainHeight, err
+	}
+
+	deleted := 0
+	affectedHeights := make(map[int64]struct{})
+	txHashesToDelete := make(map[string]struct{})
+	for ; itr.Valid(); itr.Next() {
+		keyHeight, err := extractHeightFromKey(itr.Key())
+
+		if err != nil {
+			// this is ok as the keys here are not only indexed by height
+			continue
+		}
+		if keyHeight < retainHeight {
+			fmt.Println(string([]byte(itr.Value())))
+			txHashesToDelete[string([]byte(itr.Value()))] = struct{}{}
+			err := batch.Delete(itr.Key())
+			if err != nil {
+				return 0, lastRetainHeight, err
+			}
+			affectedHeights[keyHeight] = struct{}{}
+			deleted++
+		}
+		if deleted%1000 == 0 && deleted != 0 {
+			err = flush(batch)
+			if err != nil {
+				return 0, lastRetainHeight, err
+			}
+			deleted = 0
+			batch = txi.store.NewBatch()
+			defer closeBatch(batch)
+		}
+	}
+	if deleted != 0 {
+		flush(batch)
+	}
+	itr.Close()
+	itr, err = txi.store.Iterator(nil, nil)
+	if err != nil {
+		return 0, lastRetainHeight, err
+	}
+	batch2 := txi.store.NewBatch()
+	deleted = 0
+	defer closeBatch(batch2)
+	for ; itr.Valid(); itr.Next() {
+		if _, ok := txHashesToDelete[string(itr.Key())]; ok {
+			err := batch2.Delete(itr.Key())
+			if err != nil {
+				return 0, lastRetainHeight, err
+			}
+			deleted++
+
+			if deleted%1000 == 0 && deleted != 0 {
+				err = flush(batch2)
+				if err != nil {
+					return 0, lastRetainHeight, err
+				}
+				deleted = 0
+				batch2 = txi.store.NewBatch()
+				defer closeBatch(batch2)
+			}
+		}
+	}
+
+	errSetLastRetainHeight := txi.setIndexerRetainHeight(retainHeight, batch2)
+	if deleted != 0 {
+		flush(batch2)
+	}
+	if errSetLastRetainHeight != nil {
+		return 0, lastRetainHeight, errSetLastRetainHeight
+	}
+	return int64(len(affectedHeights)), retainHeight, err
+}
+
+func (txi *TxIndex) PruneOld(retainHeight int64) (int64, int64, error) {
 	// Returns numPruned, newRetainHeight, err
 	// numPruned: the number of heights pruned. E.x. if heights {1, 3, 7} were pruned, numPruned == 3
 	// newRetainHeight: new retain height after pruning

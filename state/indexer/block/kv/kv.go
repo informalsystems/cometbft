@@ -168,6 +168,7 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 	if errSetLastRetainHeight != nil {
 		return 0, lastRetainHeight, errSetLastRetainHeight
 	}
+
 	errWriteBatch := batch.WriteSync()
 	if errWriteBatch != nil {
 		return 0, lastRetainHeight, errWriteBatch
