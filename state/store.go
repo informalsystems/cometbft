@@ -85,9 +85,9 @@ type Store interface {
 	// Gets the height at which the store is bootstrapped after out of band statesync
 	GetOfflineStateSyncHeight() (int64, error)
 	// PruneStates takes the height from which to start pruning and which height stop at
-	PruneStates(fromHeight, toHeight, evidenceThresholdHeight int64) error
+	PruneStates(fromHeight, toHeight, evidenceThresholdHeight int64) (uint64, error)
 	// PruneABCIResponses will prune all ABCI responses below the given height.
-	PruneABCIResponses(targetRetainHeight int64) (int64, int64, error)
+	PruneABCIResponses(targetRetainHeight int64, forceCompact bool) (int64, int64, error)
 	// SaveApplicationRetainHeight persists the application retain height from the application
 	SaveApplicationRetainHeight(height int64) error
 	// GetApplicationRetainHeight returns the retain height set by the application
@@ -109,14 +109,25 @@ type dbStore struct {
 	db dbm.DB
 
 	StoreOptions
+
+	StoreStateKeeper
 }
 
+type StoreStateKeeper struct {
+	ResultsToCompact uint64
+
+	StatesToCompact uint64
+}
 type StoreOptions struct {
 	// DiscardABCIResponses determines whether or not the store
 	// retains all ABCIResponses. If DiscardABCIResponses is enabled,
 	// the store will maintain only the response object from the latest
 	// height.
 	DiscardABCIResponses bool
+
+	Compact bool
+
+	CompactionInterval int64
 }
 
 var _ Store = (*dbStore)(nil)
@@ -131,7 +142,7 @@ func IsEmpty(store dbStore) (bool, error) {
 
 // NewStore creates the dbStore of the state pkg.
 func NewStore(db dbm.DB, options StoreOptions) Store {
-	return dbStore{db, options}
+	return dbStore{db, options, StoreStateKeeper{}}
 }
 
 // LoadStateFromDBOrGenesisFile loads the most recent state from the database,
@@ -295,21 +306,21 @@ func (store dbStore) Bootstrap(state State) error {
 // encoding not preserving ordering: https://github.com/tendermint/tendermint/issues/4567
 // This will cause some old states to be left behind when doing incremental partial prunes,
 // specifically older checkpoints and LastHeightChanged targets.
-func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight int64) error {
+func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight int64) (uint64, error) {
 	if from <= 0 || to <= 0 {
-		return fmt.Errorf("from height %v and to height %v must be greater than 0", from, to)
+		return 0, fmt.Errorf("from height %v and to height %v must be greater than 0", from, to)
 	}
 	if from >= to {
-		return fmt.Errorf("from height %v must be lower than to height %v", from, to)
+		return 0, fmt.Errorf("from height %v must be lower than to height %v", from, to)
 	}
 
 	valInfo, err := loadValidatorsInfo(store.db, min(to, evidenceThresholdHeight))
 	if err != nil {
-		return fmt.Errorf("validators at height %v not found: %w", to, err)
+		return 0, fmt.Errorf("validators at height %v not found: %w", to, err)
 	}
 	paramsInfo, err := store.loadConsensusParamsInfo(to)
 	if err != nil {
-		return fmt.Errorf("consensus params at height %v not found: %w", to, err)
+		return 0, fmt.Errorf("consensus params at height %v not found: %w", to, err)
 	}
 
 	keepVals := make(map[int64]bool)
@@ -337,12 +348,12 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 			if err != nil || v.ValidatorSet == nil {
 				vip, err := store.LoadValidators(h)
 				if err != nil {
-					return err
+					return pruned, err
 				}
 
 				pvi, err := vip.ToProto()
 				if err != nil {
-					return err
+					return pruned, err
 				}
 
 				v.ValidatorSet = pvi
@@ -350,17 +361,17 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 
 				bz, err := v.Marshal()
 				if err != nil {
-					return err
+					return pruned, err
 				}
 				err = batch.Set(calcValidatorsKey(h), bz)
 				if err != nil {
-					return err
+					return pruned, err
 				}
 			}
 		} else if h < evidenceThresholdHeight {
 			err = batch.Delete(calcValidatorsKey(h))
 			if err != nil {
-				return err
+				return pruned, err
 			}
 		}
 		// else we keep the validator set because we might need
@@ -369,37 +380,37 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 		if keepParams[h] {
 			p, err := store.loadConsensusParamsInfo(h)
 			if err != nil {
-				return err
+				return pruned, err
 			}
 
 			if p.ConsensusParams.Equal(&cmtproto.ConsensusParams{}) {
 				params, err := store.LoadConsensusParams(h)
 				if err != nil {
-					return err
+					return pruned, err
 				}
 				p.ConsensusParams = params.ToProto()
 
 				p.LastHeightChanged = h
 				bz, err := p.Marshal()
 				if err != nil {
-					return err
+					return pruned, err
 				}
 
 				err = batch.Set(calcConsensusParamsKey(h), bz)
 				if err != nil {
-					return err
+					return pruned, err
 				}
 			}
 		} else {
 			err = batch.Delete(calcConsensusParamsKey(h))
 			if err != nil {
-				return err
+				return pruned, err
 			}
 		}
 
 		err = batch.Delete(calcABCIResponsesKey(h))
 		if err != nil {
-			return err
+			return pruned, err
 		}
 		pruned++
 
@@ -407,7 +418,7 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 		if pruned%1000 == 0 && pruned > 0 {
 			err := batch.Write()
 			if err != nil {
-				return err
+				return pruned, err
 			}
 			batch.Close()
 			batch = store.db.NewBatch()
@@ -417,16 +428,30 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 
 	err = batch.WriteSync()
 	if err != nil {
-		return err
+		return pruned, err
 	}
 
-	return nil
+	// We do not want to panic or interrupt consensus on compaction failure
+	if store.StoreOptions.Compact {
+		store.StoreStateKeeper.StatesToCompact += uint64(pruned)
+		if store.StoreStateKeeper.StatesToCompact >= uint64(store.StoreOptions.CompactionInterval) {
+			// When the range is nil,nil, the database will try to compact
+			// ALL levels. Another option is to set a predefined range of
+			// specific keys.
+			err = store.db.Compact(nil, nil)
+			if err == nil {
+				store.StoreStateKeeper.StatesToCompact = 0
+			}
+		}
+	}
+
+	return pruned, nil
 }
 
 // PruneABCIResponses attempts to prune all ABCI responses up to, but not
 // including, the given height. On success, returns the number of heights
 // pruned and the new retain height.
-func (store dbStore) PruneABCIResponses(targetRetainHeight int64) (int64, int64, error) {
+func (store dbStore) PruneABCIResponses(targetRetainHeight int64, forceCompact bool) (int64, int64, error) {
 	if store.DiscardABCIResponses {
 		return 0, 0, nil
 	}
@@ -465,7 +490,24 @@ func (store dbStore) PruneABCIResponses(targetRetainHeight int64) (int64, int64,
 			defer batch.Close()
 		}
 	}
-	return pruned + batchPruned, targetRetainHeight, batch.WriteSync()
+	if err = batch.WriteSync(); err != nil {
+		return pruned + batchPruned, targetRetainHeight, err
+	}
+
+	// forceCompact was introduced because in main and v1 there is no config to prune ABCI results
+	// and they are pruned only when instructed by the data companion (which does not exist here)
+	// When we do want to enfore pruning of the results with state pruning then
+	// we can also check store.Compact
+	if forceCompact || store.StoreOptions.Compact {
+		store.StoreStateKeeper.ResultsToCompact += uint64(pruned + batchPruned)
+		if store.StoreStateKeeper.ResultsToCompact >= (uint64)(store.StoreOptions.CompactionInterval) {
+			err = store.db.Compact(nil, nil)
+			if err == nil {
+				store.StoreStateKeeper.ResultsToCompact = 0
+			}
+		}
+	}
+	return pruned + batchPruned, targetRetainHeight, err
 }
 
 //------------------------------------------------------------------------
