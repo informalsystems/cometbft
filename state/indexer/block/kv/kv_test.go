@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/cometbft/cometbft/internal/test"
 	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
 	"github.com/cometbft/cometbft/state/txindex/kv"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	db "github.com/cometbft/cometbft-db"
 

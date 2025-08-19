@@ -48,7 +48,7 @@ var (
 		2 * int(e2e.EvidenceAgeHeight),
 		4 * int(e2e.EvidenceAgeHeight),
 	}
-	nodeEnableCompanionPruning = uniformChoice{true} // DISABLED IN THIS FORK, false}
+	nodeEnableCompanionPruning = uniformChoice{true} //nolint:unused,SA4006 // Deprecated // DISABLED IN THIS FORK, false}
 	evidence                   = uniformChoice{0, 1, 10, 20, 200}
 	abciDelays                 = uniformChoice{"none", "small", "large"}
 	nodePerturbations          = probSetChoice{

@@ -5,13 +5,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 
 	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
 	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	db "github.com/cometbft/cometbft-db"
 
@@ -130,8 +130,10 @@ func TestTxIndex_Prune(t *testing.T) {
 	assert.True(t, isSubset(keys1, keys2))
 
 	batch2 := indexer.store.NewBatch()
-	indexer.setIndexerRetainHeight(2, batch2)
-	batch2.WriteSync()
+	err = indexer.setIndexerRetainHeight(2, batch2)
+	require.NoError(t, err)
+	err = batch2.WriteSync()
+	require.NoError(t, err)
 	defer batch2.Close()
 
 	numPruned, retainedHeight, err := indexer.Prune(2)

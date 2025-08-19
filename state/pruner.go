@@ -41,8 +41,8 @@ type Pruner struct {
 
 	// Preserve the number of state entries pruned.
 	// Used to calculated correctly when to trigger compactions
-	// TODO This is unused and should be removed from V1 and main as well.
-	prunedStates          uint64
+	// Deprecated: This field is unused and will be removed in a future release.
+	prunedStates          uint64 //nolint:unused,SA4006 // Deprecated
 	indexerPruningEnabled bool
 }
 

@@ -32,10 +32,6 @@ import (
 	"github.com/cometbft/cometbft/version"
 )
 
-// A cleanupFunc cleans up any config / test files created for a particular
-// test.
-type cleanupFunc func()
-
 var heightChangedErrorStr = "expected the new height to be changed"
 
 // make an extended commit with a single vote containing just the height and a
@@ -99,7 +95,10 @@ func saveBlocks(bs *BlockStore, state sm.State, stateStore sm.Store, from, to in
 		seenCommit := makeTestExtCommit(h, cmttime.Now())
 		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
 		if updateStateStore && stateStore != nil {
-			stateStore.Save(state)
+			err = stateStore.Save(state)
+			if err != nil {
+				panic("error reading state from store")
+			}
 		}
 	}
 }

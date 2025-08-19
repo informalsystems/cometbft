@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 
 	db "github.com/cometbft/cometbft-db"
@@ -17,7 +18,7 @@ import (
 	"github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
+	//"golang.org/x/exp/slices"
 )
 
 func TestPruneBlockIndexerToRetainHeight(t *testing.T) {

@@ -95,7 +95,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			continue
 		}
 		if keyHeight < retainHeight {
-			txHashesToDelete[string([]byte(itr.Value()))] = struct{}{}
+			txHashesToDelete[string(itr.Value())] = struct{}{}
 			err := batch.Delete(itr.Key())
 			if err != nil {
 				return 0, lastRetainHeight, err
@@ -114,7 +114,10 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 		}
 	}
 	if deleted != 0 {
-		flush(batch)
+		err = flush(batch)
+		if err != nil {
+			return 0, lastRetainHeight, err
+		}
 	}
 	itr.Close()
 	itr, err = txi.store.Iterator(nil, nil)
@@ -157,7 +160,10 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 
 	errSetLastRetainHeight := txi.setIndexerRetainHeight(retainHeight, batch2)
 	if deleted != 0 {
-		flush(batch2)
+		err = flush(batch2)
+		if err != nil {
+			return 0, lastRetainHeight, errSetLastRetainHeight
+		}
 	}
 	if errSetLastRetainHeight != nil {
 		return 0, lastRetainHeight, errSetLastRetainHeight
