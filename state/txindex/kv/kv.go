@@ -82,6 +82,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	if err != nil {
 		return 0, lastRetainHeight, err
 	}
+	defer itr.Close()
 
 	deleted := 0
 	affectedHeights := make(map[int64]struct{})
@@ -94,7 +95,6 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			continue
 		}
 		if keyHeight < retainHeight {
-			fmt.Println(string([]byte(itr.Value())))
 			txHashesToDelete[string([]byte(itr.Value()))] = struct{}{}
 			err := batch.Delete(itr.Key())
 			if err != nil {
@@ -121,6 +121,8 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	if err != nil {
 		return 0, lastRetainHeight, err
 	}
+	defer itr.Close()
+
 	batch2 := txi.store.NewBatch()
 	deleted = 0
 	defer closeBatch(batch2)
@@ -135,7 +137,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
-			err = txi.deleteResult(result, batch)
+			err = txi.deleteResult(result, batch2)
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
@@ -195,7 +197,7 @@ func (txi *TxIndex) PruneOld(retainHeight int64) (int64, int64, error) {
 		}
 	}
 	defer closeBatch(batch)
-	pruned := uint64(0)
+
 	flush := func(batch dbm.Batch) error {
 		err := batch.WriteSync()
 		if err != nil {
@@ -233,24 +235,28 @@ func (txi *TxIndex) PruneOld(retainHeight int64) (int64, int64, error) {
 			currentBatchRetainedHeight = result.Height + 1
 		}
 		// flush every 1000 blocks to avoid batches becoming too large
-		if pruned%1000 == 0 && pruned > 0 {
+		if numHeightsBatchPruned%1000 == 0 && numHeightsBatchPruned > 0 {
 			err := flush(batch)
 			if err != nil {
 				return numHeightsPersistentlyPruned, currentPersistentlyRetainedHeight, err
 			}
-			numHeightsPersistentlyPruned = numHeightsBatchPruned
+			numHeightsPersistentlyPruned += numHeightsBatchPruned
 			currentPersistentlyRetainedHeight = currentBatchRetainedHeight
+			numHeightsBatchPruned = 0
 			batch = txi.store.NewBatch()
 			defer closeBatch(batch)
 		}
 	}
 
-	err = flush(batch)
-	if err != nil {
-		return numHeightsPersistentlyPruned, currentPersistentlyRetainedHeight, err
+	if numHeightsBatchPruned != 0 {
+		err = flush(batch)
+		if err != nil {
+			return numHeightsPersistentlyPruned, currentPersistentlyRetainedHeight, err
+		}
+
+		numHeightsPersistentlyPruned = numHeightsBatchPruned
+		currentPersistentlyRetainedHeight = currentBatchRetainedHeight
 	}
-	numHeightsPersistentlyPruned = numHeightsBatchPruned
-	currentPersistentlyRetainedHeight = currentBatchRetainedHeight
 	return numHeightsPersistentlyPruned, currentPersistentlyRetainedHeight, nil
 }
 

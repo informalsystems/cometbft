@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/cometbft/cometbft/internal/test"
 	blockidxkv "github.com/cometbft/cometbft/state/indexer/block/kv"
@@ -21,7 +20,7 @@ import (
 	"github.com/cometbft/cometbft/types"
 )
 
-func TestBlockerIndexer_Prune(t *testing.T) {
+func TestBlockerIndexerPrune(t *testing.T) {
 	store := db.NewPrefixDB(db.NewMemDB(), []byte("block_events"))
 	indexer := blockidxkv.New(store)
 
@@ -57,7 +56,7 @@ func TestBlockerIndexer_Prune(t *testing.T) {
 	require.True(t, emptyIntersection(keys1, keys3))
 }
 
-func BenchmarkBlockerIndexer_Prune(_ *testing.B) {
+func BenchmarkBlockerIndexerPrune(b *testing.B) {
 	config := test.ResetTestRoot("block_indexer")
 	defer func() {
 		err := os.RemoveAll(config.RootDir)
@@ -81,12 +80,14 @@ func BenchmarkBlockerIndexer_Prune(_ *testing.B) {
 		}
 	}
 
-	startTime := time.Now()
+	b.StartTimer()
 
 	for h := 1; h <= maxHeight; h++ {
 		_, _, _ = indexer.Prune(int64(h))
 	}
-	fmt.Println(time.Since(startTime))
+
+	b.StopTimer()
+	b.Log(b.Elapsed())
 }
 
 func TestBlockIndexer(t *testing.T) {

@@ -128,10 +128,6 @@ type StoreOptions struct {
 	Compact bool
 
 	CompactionInterval int64
-
-	ResultsToCompact uint64
-
-	StatesToCompact uint64
 }
 
 var _ Store = (*dbStore)(nil)
@@ -434,7 +430,7 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 	if err != nil {
 		return pruned, err
 	}
-	store.StoreOptions.StatesToCompact += uint64(pruned)
+	store.StoreStateKeeper.StatesToCompact += uint64(pruned)
 
 	// We do not want to panic or interrupt consensus on compaction failure
 	if store.StoreOptions.Compact {

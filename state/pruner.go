@@ -39,23 +39,19 @@ type Pruner struct {
 	observer     PrunerObserver
 	metrics      *Metrics
 
-	interval time.Duration
-
-	observer PrunerObserver
-
-	metrics *Metrics
-
 	// Preserve the number of state entries pruned.
 	// Used to calculated correctly when to trigger compactions
 	// TODO This is unused and should be removed from V1 and main as well.
-	prunedStates uint64
+	prunedStates          uint64
+	indexerPruningEnabled bool
 }
 
 type prunerConfig struct {
-	dcEnabled bool
-	interval  time.Duration
-	observer  PrunerObserver
-	metrics   *Metrics
+	dcEnabled             bool
+	interval              time.Duration
+	observer              PrunerObserver
+	metrics               *Metrics
+	indexerPruningEnabled bool
 }
 
 func defaultPrunerConfig() *prunerConfig {
@@ -95,6 +91,12 @@ func WithPrunerMetrics(metrics *Metrics) PrunerOption {
 	}
 }
 
+func WithIndexerPruning(indexerPruningEnabled bool) PrunerOption {
+	return func(p *prunerConfig) {
+		p.indexerPruningEnabled = indexerPruningEnabled
+	}
+}
+
 // NewPruner creates a service that controls background pruning of node data.
 //
 // Assumes that the initial application and data companion retain heights have
@@ -113,15 +115,16 @@ func NewPruner(
 	}
 
 	p := &Pruner{
-		bs:           bs,
-		txIndexer:    txIndexer,
-		blockIndexer: blockIndexer,
-		stateStore:   stateStore,
-		logger:       logger,
-		interval:     cfg.interval,
-		observer:     cfg.observer,
-		metrics:      cfg.metrics,
-		dcEnabled:    cfg.dcEnabled,
+		bs:                    bs,
+		txIndexer:             txIndexer,
+		blockIndexer:          blockIndexer,
+		stateStore:            stateStore,
+		logger:                logger,
+		interval:              cfg.interval,
+		observer:              cfg.observer,
+		metrics:               cfg.metrics,
+		dcEnabled:             cfg.dcEnabled,
+		indexerPruningEnabled: cfg.indexerPruningEnabled,
 	}
 	p.BaseService = *service.NewBaseService(logger, "Pruner", p)
 	return p
@@ -139,6 +142,10 @@ func (p *Pruner) OnStart() error {
 	// if p.dcEnabled {
 	go p.pruneABCIResponses()
 	//}
+
+	if p.indexerPruningEnabled {
+		go p.pruneIndexesRoutine()
+	}
 	p.observer.PrunerStarted(p.interval)
 	return nil
 }
@@ -166,6 +173,16 @@ func (p *Pruner) SetApplicationBlockRetainHeight(height int64) error {
 	}
 	if err := p.stateStore.SaveApplicationRetainHeight(height); err != nil {
 		return err
+	}
+
+	if p.indexerPruningEnabled {
+		if err := p.SetBlockIndexerRetainHeight(height); err != nil {
+			return err
+		}
+
+		if err := p.SetTxIndexerRetainHeight(height); err != nil {
+			return err
+		}
 	}
 	p.metrics.ApplicationBlockRetainHeight.Set(float64(height))
 	return nil

@@ -24,6 +24,8 @@ import (
 	"github.com/cometbft/cometbft/types"
 )
 
+var _ indexer.BlockIndexer = (*BlockerIndexer)(nil)
+
 var (
 	LastBlockIndexerRetainHeightKey = []byte("LastBlockIndexerRetainHeightKey")
 	BlockIndexerRetainHeightKey     = []byte("BlockIndexerRetainHeightKey")
@@ -90,19 +92,6 @@ func (idx *BlockerIndexer) Index(bh types.EventDataNewBlockEvents) error {
 	return batch.WriteSync()
 }
 
-func getKeys(indexer BlockerIndexer) [][]byte {
-	var keys [][]byte
-
-	itr, err := indexer.store.Iterator(nil, nil)
-	if err != nil {
-		panic(err)
-	}
-	for ; itr.Valid(); itr.Next() {
-		keys = append(keys, itr.Key())
-	}
-	return keys
-}
-
 func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 	// Returns numPruned, newRetainHeight, err
 	// numPruned: the number of heights pruned or 0 in case of error. E.x. if heights {1, 3, 7} were pruned and there was no error, numPruned == 3
@@ -142,6 +131,8 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 	if err != nil {
 		return 0, lastRetainHeight, err
 	}
+	defer itr.Close()
+
 	deleted := 0
 	affectedHeights := make(map[int64]struct{})
 	for ; itr.Valid(); itr.Next() {
@@ -159,6 +150,7 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
+			deleted = 0
 			batch = idx.store.NewBatch()
 			defer closeBatch(batch)
 		}
@@ -169,9 +161,11 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 		return 0, lastRetainHeight, errSetLastRetainHeight
 	}
 
-	errWriteBatch := batch.WriteSync()
-	if errWriteBatch != nil {
-		return 0, lastRetainHeight, errWriteBatch
+	if deleted > 0 {
+		errWriteBatch := batch.WriteSync()
+		if errWriteBatch != nil {
+			return 0, lastRetainHeight, errWriteBatch
+		}
 	}
 
 	return int64(len(affectedHeights)), retainHeight, err
