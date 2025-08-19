@@ -175,15 +175,6 @@ func (p *Pruner) SetApplicationBlockRetainHeight(height int64) error {
 		return err
 	}
 
-	if p.indexerPruningEnabled {
-		if err := p.SetBlockIndexerRetainHeight(height); err != nil {
-			return err
-		}
-
-		if err := p.SetTxIndexerRetainHeight(height); err != nil {
-			return err
-		}
-	}
 	p.metrics.ApplicationBlockRetainHeight.Set(float64(height))
 	return nil
 }

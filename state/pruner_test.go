@@ -18,7 +18,6 @@ import (
 	"github.com/cometbft/cometbft/store"
 	"github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/require"
-	//"golang.org/x/exp/slices"
 )
 
 func TestPruneBlockIndexerToRetainHeight(t *testing.T) {

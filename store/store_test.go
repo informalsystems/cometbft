@@ -97,7 +97,7 @@ func saveBlocks(bs *BlockStore, state sm.State, stateStore sm.Store, from, to in
 		if updateStateStore && stateStore != nil {
 			err = stateStore.Save(state)
 			if err != nil {
-				panic("error reading state from store")
+				panic("error reading state from stor")
 			}
 		}
 	}

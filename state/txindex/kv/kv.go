@@ -46,6 +46,20 @@ type TxIndex struct {
 	eventSeq int64
 
 	log log.Logger
+
+	totalPrunedHeights int64
+	compact            bool
+	compactionInterval int64
+}
+
+type TxIndexerOption func(*TxIndex)
+
+// WithCompaction sets the compaciton parameters.
+func WithCompaction(compact bool, compactionInterval int64) TxIndexerOption {
+	return func(txi *TxIndex) {
+		txi.compact = compact
+		txi.compactionInterval = compactionInterval
+	}
 }
 
 func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
@@ -108,6 +122,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
+			txi.totalPrunedHeights += int64(deleted)
 			deleted = 0
 			batch = txi.store.NewBatch()
 			defer closeBatch(batch)
@@ -119,6 +134,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			return 0, lastRetainHeight, err
 		}
 	}
+	txi.totalPrunedHeights += int64(deleted)
 	itr.Close()
 	itr, err = txi.store.Iterator(nil, nil)
 	if err != nil {
@@ -152,6 +168,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 					return 0, lastRetainHeight, err
 				}
 				deleted = 0
+				txi.totalPrunedHeights += int64(deleted)
 				batch2 = txi.store.NewBatch()
 				defer closeBatch(batch2)
 			}
@@ -165,6 +182,12 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			return 0, lastRetainHeight, errSetLastRetainHeight
 		}
 	}
+	txi.totalPrunedHeights += int64(deleted)
+	if txi.compact && txi.totalPrunedHeights >= txi.compactionInterval {
+		txi.store.Compact(nil, nil)
+		txi.totalPrunedHeights -= txi.compactionInterval
+	}
+
 	if errSetLastRetainHeight != nil {
 		return 0, lastRetainHeight, errSetLastRetainHeight
 	}
@@ -304,10 +327,16 @@ func (txi *TxIndex) getIndexerRetainHeight() (int64, error) {
 }
 
 // NewTxIndex creates new KV indexer.
-func NewTxIndex(store dbm.DB) *TxIndex {
-	return &TxIndex{
+func NewTxIndex(store dbm.DB, options ...TxIndexerOption) *TxIndex {
+
+	txi := &TxIndex{
 		store: store,
 	}
+
+	for _, option := range options {
+		option(txi)
+	}
+	return txi
 }
 
 func (txi *TxIndex) SetLogger(l log.Logger) {

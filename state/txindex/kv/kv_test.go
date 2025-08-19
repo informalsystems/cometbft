@@ -69,7 +69,7 @@ func TestTxIndex(t *testing.T) {
 }
 
 func TestTxIndex_Prune(t *testing.T) {
-	indexer := NewTxIndex(db.NewMemDB())
+	indexer := NewTxIndex(db.NewMemDB(), WithCompaction(true, 5))
 
 	metaKeys := [][]byte{
 		LastTxIndexerRetainHeightKey,

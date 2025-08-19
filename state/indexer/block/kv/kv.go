@@ -40,14 +40,33 @@ type BlockerIndexer struct {
 
 	// Add unique event identifier to use when querying
 	// Matching will be done both on height AND eventSeq
-	eventSeq int64
-	log      log.Logger
+	eventSeq           int64
+	log                log.Logger
+	totalPrunedHeights int64
+	compact            bool
+	compactionInterval int64
 }
 
-func New(store dbm.DB) *BlockerIndexer {
-	return &BlockerIndexer{
+type BlockIndexerOption func(*BlockerIndexer)
+
+// WithCompaction sets the compaciton parameters.
+func WithCompaction(compact bool, compactionInterval int64) BlockIndexerOption {
+	return func(bs *BlockerIndexer) {
+		bs.compact = compact
+		bs.compactionInterval = compactionInterval
+	}
+}
+
+func New(store dbm.DB, options ...BlockIndexerOption) *BlockerIndexer {
+
+	bs := &BlockerIndexer{
 		store: store,
 	}
+
+	for _, option := range options {
+		option(bs)
+	}
+	return bs
 }
 
 func (idx *BlockerIndexer) SetLogger(l log.Logger) {
@@ -150,6 +169,7 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
+			idx.totalPrunedHeights += int64(deleted)
 			deleted = 0
 			batch = idx.store.NewBatch()
 			defer closeBatch(batch)
@@ -162,10 +182,16 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 	}
 
 	if deleted > 0 {
+		idx.totalPrunedHeights += int64(deleted)
 		errWriteBatch := batch.WriteSync()
 		if errWriteBatch != nil {
 			return 0, lastRetainHeight, errWriteBatch
 		}
+	}
+
+	if idx.compact && idx.totalPrunedHeights >= idx.compactionInterval {
+		idx.store.Compact(nil, nil)
+		idx.totalPrunedHeights = idx.totalPrunedHeights - idx.compactionInterval
 	}
 
 	return int64(len(affectedHeights)), retainHeight, err
