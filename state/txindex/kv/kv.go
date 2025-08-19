@@ -51,7 +51,7 @@ type TxIndex struct {
 func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	lastRetainHeight, err := txi.getIndexerRetainHeight()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to look up last block indexer retain height: %w", err)
+		return 0, 0, fmt.Errorf("failed to look up last tx indexer retain height: %w", err)
 	}
 	if lastRetainHeight == 0 {
 		lastRetainHeight = 1
@@ -61,7 +61,7 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	closeBatch := func(batch dbm.Batch) {
 		err := batch.Close()
 		if err != nil {
-			txi.log.Error(fmt.Sprintf("Error when closing block indexer pruning batch: %v", err))
+			txi.log.Error(fmt.Sprintf("Error when closing tx indexer pruning batch: %v", err))
 		}
 	}
 	defer closeBatch(batch)
@@ -69,11 +69,11 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	flush := func(batch dbm.Batch) error {
 		err := batch.WriteSync()
 		if err != nil {
-			return fmt.Errorf("failed to flush block indexer pruning batch %w", err)
+			return fmt.Errorf("failed to flush tx indexer pruning batch %w", err)
 		}
 		err = batch.Close()
 		if err != nil {
-			txi.log.Error(fmt.Sprintf("Error when closing block indexer pruning batch: %v", err))
+			txi.log.Error(fmt.Sprintf("Error when closing tx indexer pruning batch: %v", err))
 		}
 		return nil
 	}
@@ -130,6 +130,15 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 			if err != nil {
 				return 0, lastRetainHeight, err
 			}
+			result := new(abci.TxResult)
+			err = proto.Unmarshal(itr.Value(), result)
+			if err != nil {
+				return 0, lastRetainHeight, err
+			}
+			err = txi.deleteResult(result, batch)
+			if err != nil {
+				return 0, lastRetainHeight, err
+			}
 			deleted++
 
 			if deleted%1000 == 0 && deleted != 0 {
@@ -162,7 +171,7 @@ func (txi *TxIndex) PruneOld(retainHeight int64) (int64, int64, error) {
 
 	lastRetainHeight, err := txi.getIndexerRetainHeight()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to look up last block indexer retain height: %w", err)
+		return 0, 0, fmt.Errorf("failed to look up last tx indexer retain height: %w", err)
 	}
 	if lastRetainHeight == 0 {
 		lastRetainHeight = 1
