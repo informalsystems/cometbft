@@ -190,7 +190,7 @@ func (idx *BlockerIndexer) Prune(retainHeight int64) (int64, int64, error) {
 	}
 
 	if idx.compact && idx.totalPrunedHeights >= idx.compactionInterval {
-		idx.store.Compact(nil, nil)
+		_ = idx.store.Compact(nil, nil)
 		idx.totalPrunedHeights = idx.totalPrunedHeights - idx.compactionInterval
 	}
 

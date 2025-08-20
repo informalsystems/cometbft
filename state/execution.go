@@ -332,7 +332,7 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 		// TODO THIS SHOULD BE REVISITED WHEN MERGED UPSTREAM TO BE USED
 		// WITH A DATA COMPANION. In cometbft main, the ABCI result and
 		// indexer retain heights are set ONLY by the data companion
-		// This changes that assumption. The behaviour should be the same but
+		// This changes that assumption. The behavior should be the same but
 		// it should be tested.
 		err = blockExec.pruner.SetABCIResRetainHeight(retainHeight)
 		if err != nil {
