@@ -103,7 +103,6 @@ func (txi *TxIndex) Prune(retainHeight int64) (int64, int64, error) {
 	txHashesToDelete := make(map[string]struct{})
 	for ; itr.Valid(); itr.Next() {
 		keyHeight, err := extractHeightFromKey(itr.Key())
-
 		if err != nil {
 			// this is ok as the keys here are not only indexed by height
 			continue
@@ -1016,7 +1015,7 @@ func extractHeightFromKey(key []byte) (int64, error) {
 	// the height is the second last element in the key.
 	// Find the position of the last occurrence of tagKeySeparator
 	endPos := bytes.LastIndexByte(key, tagKeySeparatorRune)
-	if endPos == -1 {
+	if endPos == -1 || endPos < 3 {
 		return 0, errors.New("separator not found")
 	}
 

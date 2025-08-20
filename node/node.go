@@ -1027,6 +1027,9 @@ func createPruner(
 		}
 		prunerOpts = append(prunerOpts, sm.WithPrunerCompanionEnabled())
 	}
+	if config.Storage.Pruning.IndexerPruningEnabled {
+		prunerOpts = append(prunerOpts, sm.WithIndexerPruning(true))
+	}
 
 	pruner := sm.NewPruner(stateStore, blockStore, blockIndexer, txIndexer, logger, prunerOpts...)
 	var err error

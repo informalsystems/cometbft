@@ -1323,7 +1323,7 @@ type PruningConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
 	// Data companion-related pruning configuration.
 	DataCompanion         *DataCompanionPruningConfig `mapstructure:"data_companion"`
-	IndexerPruningEnabled bool                        `mapstructure:"indexer_pruning_enalbed"`
+	IndexerPruningEnabled bool                        `mapstructure:"indexer_pruning_enabled"`
 }
 
 func DefaultPruningConfig() *PruningConfig {

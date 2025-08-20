@@ -540,7 +540,7 @@ interval = "{{ .Storage.Pruning.Interval }}"
 
 # Indexer pruning enabling. Note that this has not been tested in production
 # It should be enabled on full nodes to confirm it is not impacting performance. 
-indexer_pruning_enabled = "{{ .Storage.Pruning.IndexerPruningEnabled }}"
+indexer_pruning_enabled = {{ .Storage.Pruning.IndexerPruningEnabled }}
 
 #
 # Storage pruning configuration relating only to the data companion.
