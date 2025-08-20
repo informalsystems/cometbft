@@ -1,9 +1,6 @@
 key_type = "secp256k1"
-prometheus = true
-load_tx_batch_size = 200
+
 [node.validator01]
-retain_blocks = 14
 [node.validator02]
 [node.validator03]
-retain_blocks = 14
 [node.validator04]

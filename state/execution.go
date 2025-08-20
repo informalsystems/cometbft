@@ -324,7 +324,6 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 
 	// Prune old heights, if requested by ABCI app.
 	if retainHeight > 0 && blockExec.pruner != nil {
-		blockExec.logger.Info("YYYY ")
 		err := blockExec.pruner.SetApplicationBlockRetainHeight(retainHeight)
 		if err != nil {
 			blockExec.logger.Error("Failed to set application block retain height", "retainHeight", retainHeight, "err", err)
@@ -347,10 +346,8 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 				blockExec.logger.Error("Failed to set tx indexer retain height", "retainHeight", retainHeight, "err", err)
 			}
 		}
-	} else {
-		blockExec.logger.Info("KKK ")
 	}
-	blockExec.logger.Info("YY2222 ")
+
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
 	fireEvents(blockExec.logger, blockExec.eventBus, block, blockID, abciResponse, validatorUpdates)
