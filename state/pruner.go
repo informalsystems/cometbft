@@ -246,7 +246,7 @@ func (p *Pruner) SetTxIndexerRetainHeight(height int64) error {
 	// serialized.
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	if !p.heightWithinBounds(height) {
+	if height < 0 {
 		return ErrInvalidHeightValue
 	}
 
@@ -273,7 +273,7 @@ func (p *Pruner) SetBlockIndexerRetainHeight(height int64) error {
 	// serialized.
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	if !p.heightWithinBounds(height) {
+	if height < 0 {
 		return ErrInvalidHeightValue
 	}
 

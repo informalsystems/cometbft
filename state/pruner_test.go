@@ -28,6 +28,7 @@ func TestPruneBlockIndexerToRetainHeight(t *testing.T) {
 		err := blockIndexer.Index(events)
 		require.NoError(t, err)
 	}
+
 	err := pruner.SetBlockIndexerRetainHeight(2)
 	require.NoError(t, err)
 	actual, err := pruner.GetBlockIndexerRetainHeight()
