@@ -34,8 +34,6 @@ import (
 
 var heightChangedErrorStr = "expected the new height to be changed"
 
-var heightChangedErrorStr = "expected the new height to be changed"
-
 // make an extended commit with a single vote containing just the height and a
 // timestamp
 func makeTestExtCommit(height int64, timestamp time.Time) *types.ExtendedCommit {
