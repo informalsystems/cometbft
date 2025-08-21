@@ -34,6 +34,8 @@ import (
 
 var heightChangedErrorStr = "expected the new height to be changed"
 
+var heightChangedErrorStr = "expected the new height to be changed"
+
 // make an extended commit with a single vote containing just the height and a
 // timestamp
 func makeTestExtCommit(height int64, timestamp time.Time) *types.ExtendedCommit {
@@ -902,6 +904,7 @@ func TestLoadBlockMetaByHash(t *testing.T) {
 func TestBlockFetchAtHeight(t *testing.T) {
 	state, bs, _, _, cleanup, _ := makeStateAndBlockStoreAndIndexers("TestBlockFetchAtHeight")
 	defer cleanup()
+
 	require.Equal(t, bs.Height(), int64(0), "initially the height should be zero")
 	block := state.MakeBlock(bs.Height()+1, nil, new(types.Commit), nil, state.Validators.GetProposer().Address)
 

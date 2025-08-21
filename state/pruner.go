@@ -174,7 +174,6 @@ func (p *Pruner) SetApplicationBlockRetainHeight(height int64) error {
 	if err := p.stateStore.SaveApplicationRetainHeight(height); err != nil {
 		return err
 	}
-
 	p.metrics.ApplicationBlockRetainHeight.Set(float64(height))
 	return nil
 }
