@@ -16,7 +16,9 @@ import (
 	dbm "github.com/cometbft/cometbft-db"
 
 	"github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	"github.com/cometbft/cometbft/internal/test"
+	"github.com/cometbft/cometbft/libs/log"
 	cmtrand "github.com/cometbft/cometbft/libs/rand"
 	cmtstore "github.com/cometbft/cometbft/proto/tendermint/store"
 	cmtversion "github.com/cometbft/cometbft/proto/tendermint/version"
@@ -29,6 +31,8 @@ import (
 // A cleanupFunc cleans up any config / test files created for a particular
 // test.
 type cleanupFunc func()
+
+var heightChangedErrorStr = "expected the new height to be changed"
 
 // make an extended commit with a single vote containing just the height and a
 // timestamp
@@ -60,10 +64,8 @@ func makeTestExtCommitWithNumSigs(height int64, timestamp time.Time, numSigs int
 	}
 }
 
-func makeStateAndBlockStore() (sm.State, *BlockStore, cleanupFunc) {
-	config := test.ResetTestRoot("blockchain_reactor_test")
-	// blockDB := dbm.NewDebugDB("blockDB", dbm.NewMemDB())
-	// stateDB := dbm.NewDebugDB("stateDB", dbm.NewMemDB())
+func makeStateBlockAndStateStore(testName string) (sm.State, *BlockStore, sm.Store, cleanupFunc) {
+	config := test.ResetTestRoot(testName + fmt.Sprintf("random-%d", cmtrand.Int()))
 	blockDB := dbm.NewMemDB()
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB, sm.StoreOptions{
@@ -73,9 +75,24 @@ func makeStateAndBlockStore() (sm.State, *BlockStore, cleanupFunc) {
 	if err != nil {
 		panic(fmt.Errorf("error constructing state from genesis file: %w", err))
 	}
-	return state, NewBlockStore(blockDB), func() { os.RemoveAll(config.RootDir) }
+	return state, NewBlockStore(blockDB), stateStore, func() { os.RemoveAll(config.RootDir) }
 }
 
+// Helper to create and save a batch of blocks (optionally updating stateStore)
+func saveBlocks(bs *BlockStore, state sm.State, stateStore sm.Store, from, to int64, updateStateStore bool) {
+	for h := from; h <= to; h++ {
+		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
+		partSet, err := block.MakePartSet(types.PartSizeBytes)
+		if err != nil {
+			panic(err)
+		}
+		seenCommit := makeTestExtCommit(h, cmttime.Now())
+		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
+		if updateStateStore && stateStore != nil {
+			stateStore.Save(state)
+		}
+	}
+}
 func TestLoadBlockStoreState(t *testing.T) {
 	type blockStoreTest struct {
 		testName string
@@ -148,9 +165,9 @@ func newInMemoryBlockStore() (*BlockStore, dbm.DB) {
 }
 
 // TODO: This test should be simplified ...
-
 func TestBlockStoreSaveLoadBlock(t *testing.T) {
-	state, bs, cleanup := makeStateAndBlockStore()
+
+	state, bs, _, cleanup := makeStateBlockAndStateStore("TestBlockStoreSaveLoadBlock")
 	defer cleanup()
 	require.Equal(t, bs.Base(), int64(0), "initially the base should be zero")
 	require.Equal(t, bs.Height(), int64(0), "initially the height should be zero")
@@ -173,8 +190,8 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 
 	seenCommit := makeTestExtCommit(block.Header.Height, cmttime.Now())
 	bs.SaveBlockWithExtendedCommit(block, validPartSet, seenCommit)
-	require.EqualValues(t, 1, bs.Base(), "expecting the new height to be changed")
-	require.EqualValues(t, block.Header.Height, bs.Height(), "expecting the new height to be changed")
+	require.EqualValues(t, 1, bs.Base(), heightChangedErrorStr)
+	require.EqualValues(t, block.Header.Height, bs.Height(), heightChangedErrorStr)
 
 	incompletePartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 2})
 	uncontiguousPartSet := types.NewPartSetFromHeader(types.PartSetHeader{Total: 0})
@@ -404,7 +421,7 @@ func TestSaveBlockWithExtendedCommitPanicOnAbsentExtension(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			state, bs, cleanup := makeStateAndBlockStore()
+			state, bs, _, cleanup := makeStateBlockAndStateStore("testCase.name")
 			defer cleanup()
 			h := bs.Height() + 1
 			block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
@@ -445,7 +462,7 @@ func TestLoadBlockExtendedCommit(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			state, bs, cleanup := makeStateAndBlockStore()
+			state, bs, _, cleanup := makeStateBlockAndStateStore("testCase.name")
 			defer cleanup()
 			h := bs.Height() + 1
 			block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
@@ -477,13 +494,7 @@ func TestLoadBaseMeta(t *testing.T) {
 	require.NoError(t, err)
 	bs := NewBlockStore(dbm.NewMemDB())
 
-	for h := int64(1); h <= 10; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 10, true)
 
 	_, _, err = bs.PruneBlocks(4, state)
 	require.NoError(t, err)
@@ -545,6 +556,184 @@ func TestLoadBlockPart(t *testing.T) {
 		"expecting successful retrieval of previously saved block")
 }
 
+type prunerObserver struct {
+	sm.NoopPrunerObserver
+	prunedABCIResInfoCh   chan *sm.ABCIResponsesPrunedInfo
+	prunedBlocksResInfoCh chan *sm.BlocksPrunedInfo
+}
+
+func newPrunerObserver(infoChCap int) *prunerObserver {
+	return &prunerObserver{
+		prunedABCIResInfoCh:   make(chan *sm.ABCIResponsesPrunedInfo, infoChCap),
+		prunedBlocksResInfoCh: make(chan *sm.BlocksPrunedInfo, infoChCap),
+	}
+}
+
+func (o *prunerObserver) PrunerPrunedABCIRes(info *sm.ABCIResponsesPrunedInfo) {
+	o.prunedABCIResInfoCh <- info
+}
+
+func (o *prunerObserver) PrunerPrunedBlocks(info *sm.BlocksPrunedInfo) {
+	o.prunedBlocksResInfoCh <- info
+}
+
+func genValSet(size int) *types.ValidatorSet {
+	vals := make([]*types.Validator, size)
+	for i := 0; i < size; i++ {
+		vals[i] = types.NewValidator(ed25519.GenPrivKey().PubKey(), 10)
+	}
+	return types.NewValidatorSet(vals)
+}
+
+// This test tests the pruning service and its pruning of the blockstore
+// The state store cannot be pruned here because we do not have proper
+// state stored. The test is expected to pass even though the log should
+// inform about the inability to prune the state store
+func TestPruningService(t *testing.T) {
+
+	state, bs, stateStore, cleanupF := makeStateBlockAndStateStore("TestPruningService")
+	defer cleanupF()
+	stateStore.Save(state)
+
+	assert.EqualValues(t, 0, bs.Base())
+	assert.EqualValues(t, 0, bs.Height())
+	assert.EqualValues(t, 0, bs.Size())
+
+	err := initStateStoreRetainHeights(stateStore, 0, 0, 0)
+	require.NoError(t, err)
+
+	obs := newPrunerObserver(1)
+
+	pruner := sm.NewPruner(
+		stateStore,
+		bs,
+		log.TestingLogger(),
+		sm.WithPrunerInterval(time.Second*1),
+		sm.WithPrunerObserver(obs),
+		sm.WithPrunerCompanionEnabled(),
+	)
+
+	err = pruner.SetApplicationBlockRetainHeight(1)
+	require.Error(t, err)
+	err = pruner.SetApplicationBlockRetainHeight(0)
+	require.NoError(t, err)
+
+	// make more than 1000 blocks, to test batch deletions
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
+
+	assert.EqualValues(t, 1, bs.Base())
+	assert.EqualValues(t, 1500, bs.Height())
+	assert.EqualValues(t, 1500, bs.Size())
+
+	state.LastBlockTime = time.Date(2020, 1, 1, 1, 0, 0, 0, time.UTC)
+	state.LastBlockHeight = 1500
+
+	state.ConsensusParams.Evidence.MaxAgeNumBlocks = 400
+	state.ConsensusParams.Evidence.MaxAgeDuration = 1 * time.Second
+
+	// Generate a bunch of state data.
+	// This is needed because the pruning is expecting to load the state from the database thus
+	// We have to have acceptable values for all fields of the state
+
+	validatorSet := genValSet(1)
+
+	state.Validators = validatorSet
+	state.NextValidators = validatorSet
+	if state.LastBlockHeight >= 1 {
+		state.LastValidators = state.Validators
+	}
+
+	err = stateStore.Save(state)
+	require.NoError(t, err)
+
+	// Check that basic pruning works
+	err = pruner.SetApplicationBlockRetainHeight(1200)
+	require.NoError(t, err)
+	err = pruner.SetCompanionBlockRetainHeight(1200)
+	require.NoError(t, err)
+	err = pruner.Start()
+	require.NoError(t, err)
+
+	select {
+	case info := <-obs.prunedBlocksResInfoCh:
+		assert.EqualValues(t, 0, info.FromHeight)
+		assert.EqualValues(t, 1199, info.ToHeight)
+		assert.EqualValues(t, 1200, bs.Base())
+		assert.EqualValues(t, 1500, bs.Height())
+		assert.EqualValues(t, 301, bs.Size())
+		require.NotNil(t, bs.LoadBlock(1200))
+		require.Nil(t, bs.LoadBlock(1199))
+		// The header and commit for heights 1100 onwards
+		// need to remain to verify evidence
+		require.NotNil(t, bs.LoadBlockMeta(1100))
+		require.Nil(t, bs.LoadBlockMeta(1099))
+		require.NotNil(t, bs.LoadBlockCommit(1100))
+		require.Nil(t, bs.LoadBlockCommit(1099))
+		for i := int64(1); i < 1200; i++ {
+			require.Nil(t, bs.LoadBlock(i))
+		}
+		for i := int64(1200); i <= 1500; i++ {
+			require.NotNil(t, bs.LoadBlock(i))
+		}
+		t.Log("Done pruning blocks until height 1200")
+
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for pruning run to complete")
+
+	}
+
+	// Pruning below the current base should error
+	err = pruner.SetApplicationBlockRetainHeight(1199)
+	require.Error(t, err)
+
+	// Pruning to the current base should work
+	err = pruner.SetApplicationBlockRetainHeight(1200)
+	require.NoError(t, err)
+
+	// Pruning again should work
+	err = pruner.SetApplicationBlockRetainHeight(1300)
+	require.NoError(t, err)
+
+	err = pruner.SetCompanionBlockRetainHeight(1350)
+	assert.NoError(t, err)
+
+	select {
+	case <-obs.prunedBlocksResInfoCh:
+		assert.EqualValues(t, 1300, bs.Base())
+
+		// we should still have the header and the commit
+		// as they're needed for evidence
+		require.NotNil(t, bs.LoadBlockMeta(1100))
+		require.Nil(t, bs.LoadBlockMeta(1099))
+		require.NotNil(t, bs.LoadBlockCommit(1100))
+		require.Nil(t, bs.LoadBlockCommit(1099))
+		t.Log("Done pruning up until 1300")
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for pruning run to complete")
+	}
+	// Setting the pruning height beyond the current height should error
+	err = pruner.SetApplicationBlockRetainHeight(1501)
+	require.Error(t, err)
+
+	// Pruning to the current height should work
+	err = pruner.SetApplicationBlockRetainHeight(1500)
+	require.NoError(t, err)
+
+	select {
+	case <-obs.prunedBlocksResInfoCh:
+		// But we will prune only until 1350 because that was the Companions height
+		// and it is lower
+		assert.Nil(t, bs.LoadBlock(1349))
+		assert.NotNil(t, bs.LoadBlock(1350), fmt.Sprintf("expected block at height 1350 to be there, but it was not; block store base height = %d", bs.Base()))
+		assert.NotNil(t, bs.LoadBlock(1500))
+		assert.Nil(t, bs.LoadBlock(1501))
+		t.Log("Done pruning blocks until 1500")
+
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "timed out waiting for pruning run to complete")
+	}
+}
+
 func TestPruneBlocks(t *testing.T) {
 	config := test.ResetTestRoot("blockchain_reactor_test")
 	defer os.RemoveAll(config.RootDir)
@@ -553,6 +742,7 @@ func TestPruneBlocks(t *testing.T) {
 	})
 	state, err := stateStore.LoadFromDBOrGenesisFile(config.GenesisFile())
 	require.NoError(t, err)
+
 	db := dbm.NewMemDB()
 	bs := NewBlockStore(db)
 	assert.EqualValues(t, 0, bs.Base())
@@ -566,14 +756,7 @@ func TestPruneBlocks(t *testing.T) {
 	_, _, err = bs.PruneBlocks(0, state)
 	require.Error(t, err)
 
-	// make more than 1000 blocks, to test batch deletions
-	for h := int64(1); h <= 1500; h++ {
-		block := state.MakeBlock(h, test.MakeNTxs(h, 10), new(types.Commit), nil, state.Validators.GetProposer().Address)
-		partSet, err := block.MakePartSet(types.PartSizeBytes)
-		require.NoError(t, err)
-		seenCommit := makeTestExtCommit(h, cmttime.Now())
-		bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	}
+	saveBlocks(bs, state, stateStore, 1, 1500, true)
 
 	assert.EqualValues(t, 1, bs.Base())
 	assert.EqualValues(t, 1500, bs.Height())
@@ -710,7 +893,7 @@ func TestLoadBlockMetaByHash(t *testing.T) {
 }
 
 func TestBlockFetchAtHeight(t *testing.T) {
-	state, bs, cleanup := makeStateAndBlockStore()
+	state, bs, _, cleanup := makeStateBlockAndStateStore("TestBlockFetchAtHeight")
 	defer cleanup()
 	require.Equal(t, bs.Height(), int64(0), "initially the height should be zero")
 	block := state.MakeBlock(bs.Height()+1, nil, new(types.Commit), nil, state.Validators.GetProposer().Address)
@@ -719,7 +902,7 @@ func TestBlockFetchAtHeight(t *testing.T) {
 	require.NoError(t, err)
 	seenCommit := makeTestExtCommit(block.Header.Height, cmttime.Now())
 	bs.SaveBlockWithExtendedCommit(block, partSet, seenCommit)
-	require.Equal(t, bs.Height(), block.Header.Height, "expecting the new height to be changed")
+	require.Equal(t, bs.Height(), block.Header.Height, heightChangedErrorStr)
 
 	blockAtHeight := bs.LoadBlock(bs.Height())
 	b1, err := block.ToProto()
@@ -765,4 +948,17 @@ func newBlock(hdr types.Header, lastCommit *types.Commit) *types.Block {
 		Header:     hdr,
 		LastCommit: lastCommit,
 	}
+}
+
+func initStateStoreRetainHeights(stateStore sm.Store, appBlockRH, dcBlockRH, dcBlockResultsRH int64) error {
+	if err := stateStore.SaveApplicationRetainHeight(appBlockRH); err != nil {
+		return fmt.Errorf("failed to set initial application block retain height: %w", err)
+	}
+	if err := stateStore.SaveCompanionBlockRetainHeight(dcBlockRH); err != nil {
+		return fmt.Errorf("failed to set initial companion block retain height: %w", err)
+	}
+	if err := stateStore.SaveABCIResRetainHeight(dcBlockResultsRH); err != nil {
+		return fmt.Errorf("failed to set initial ABCI results retain height: %w", err)
+	}
+	return nil
 }

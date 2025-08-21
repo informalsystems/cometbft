@@ -521,6 +521,48 @@ peer_query_maj23_sleep_duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # reindex events in the command-line tool.
 discard_abci_responses = {{ .Storage.DiscardABCIResponses}}
 
+# If set to true, CometBFT will force compaction to happen for databases that support this feature.
+# and save on storage space. Setting this to true is most benefits when used in combination
+# with pruning as it will phyisically delete the entries marked for deletion.
+# false by default (forcing compaction is disabled).
+compact = false
+# To avoid forcing compaction every time, this parameter instructs CometBFT to wait 
+# the given amount of blocks to be pruned before triggering compaction.
+# It should be tuned depending on the number of items. If your retain height is 1 block,
+# it is too much of an overhead to try compaction every block. But it should also not be a very
+# large multiple of your retain height as it might occur bigger overheads.
+compaction_interval = 1000
+
+[storage.pruning]
+
+# The time period between automated background pruning operations.
+interval = "{{ .Storage.Pruning.Interval }}"
+
+#
+# Storage pruning configuration relating only to the data companion.
+#
+[storage.pruning.data_companion]
+
+# Whether automatic pruning respects values set by the data companion. Disabled
+# by default. All other parameters in this section are ignored when this is
+# disabled.
+#
+# If disabled, only the application retain height will influence block pruning
+# (but not block results pruning). Only enabling this at a later stage will
+# potentially mean that blocks below the application-set retain height at the
+# time will not be available to the data companion.
+enabled = {{ .Storage.Pruning.DataCompanion.Enabled }}
+
+# The initial value for the data companion block retain height if the data
+# companion has not yet explicitly set one. If the data companion has already
+# set a block retain height, this is ignored.
+initial_block_retain_height = {{ .Storage.Pruning.DataCompanion.InitialBlockRetainHeight }}
+
+# The initial value for the data companion block results retain height if the
+# data companion has not yet explicitly set one. If the data companion has
+# already set a block results retain height, this is ignored.
+initial_block_results_retain_height = {{ .Storage.Pruning.DataCompanion.InitialBlockResultsRetainHeight }}
+
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
 #######################################################
