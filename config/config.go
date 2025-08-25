@@ -1322,20 +1322,23 @@ type PruningConfig struct {
 	// The time period between automated background pruning operations.
 	Interval time.Duration `mapstructure:"interval"`
 	// Data companion-related pruning configuration.
-	DataCompanion *DataCompanionPruningConfig `mapstructure:"data_companion"`
+	DataCompanion         *DataCompanionPruningConfig `mapstructure:"data_companion"`
+	IndexerPruningEnabled bool                        `mapstructure:"indexer_pruning_enabled"`
 }
 
 func DefaultPruningConfig() *PruningConfig {
 	return &PruningConfig{
-		Interval:      DefaultPruningInterval,
-		DataCompanion: DefaultDataCompanionPruningConfig(),
+		Interval:              DefaultPruningInterval,
+		DataCompanion:         DefaultDataCompanionPruningConfig(),
+		IndexerPruningEnabled: false,
 	}
 }
 
 func TestPruningConfig() *PruningConfig {
 	return &PruningConfig{
-		Interval:      DefaultPruningInterval,
-		DataCompanion: TestDataCompanionPruningConfig(),
+		Interval:              DefaultPruningInterval,
+		DataCompanion:         TestDataCompanionPruningConfig(),
+		IndexerPruningEnabled: true,
 	}
 }
 

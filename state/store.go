@@ -430,10 +430,11 @@ func (store dbStore) PruneStates(from int64, to int64, evidenceThresholdHeight i
 	if err != nil {
 		return pruned, err
 	}
+	store.StoreStateKeeper.StatesToCompact += pruned
 
 	// We do not want to panic or interrupt consensus on compaction failure
 	if store.StoreOptions.Compact {
-		store.StoreStateKeeper.StatesToCompact += uint64(pruned)
+		store.StoreStateKeeper.StatesToCompact += pruned
 		if store.StoreStateKeeper.StatesToCompact >= uint64(store.StoreOptions.CompactionInterval) {
 			// When the range is nil,nil, the database will try to compact
 			// ALL levels. Another option is to set a predefined range of

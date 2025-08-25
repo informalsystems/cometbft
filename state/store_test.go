@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	cfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/indexer/block"
+	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -167,7 +171,7 @@ func TestPruneStates(t *testing.T) {
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			_, _, callbackF, stateStore := makeStateAndBlockStore("TestPruneStates_" + name)
+			_, _, _, _, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestPruneStates_" + name)
 			defer callbackF()
 
 			// Generate a bunch of state data. Validators change for heights ending with 3, and
@@ -244,8 +248,8 @@ func sliceToMap(s []int64) map[int64]bool {
 	return m
 }
 
-func makeStateAndBlockStore(testName string) (sm.State, *store.BlockStore, func(), sm.Store) {
-	config := test.ResetTestRoot("state_" + testName + fmt.Sprintf("_%d", time.Now().Unix()))
+func makeStateAndBlockStoreAndIndexers(testName string) (sm.State, *store.BlockStore, txindex.TxIndexer, indexer.BlockIndexer, func(), sm.Store) {
+	config := test.ResetTestRoot(testName + fmt.Sprintf("-%d", time.Now().Unix()))
 	blockDB := dbm.NewMemDB()
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB, sm.StoreOptions{
@@ -257,7 +261,13 @@ func makeStateAndBlockStore(testName string) (sm.State, *store.BlockStore, func(
 	if err != nil {
 		panic(fmt.Sprintf("error constructing state from genesis file: %s", err.Error()))
 	}
-	return state, store.NewBlockStore(blockDB), func() { os.RemoveAll(config.RootDir) }, stateStore
+
+	txIndexer, blockIndexer, err := block.IndexerFromConfig(config, cfg.DefaultDBProvider, "test")
+	if err != nil {
+		panic(err)
+	}
+
+	return state, store.NewBlockStore(blockDB), txIndexer, blockIndexer, func() { os.RemoveAll(config.RootDir) }, stateStore
 }
 
 func initStateStoreRetainHeights(stateStore sm.Store, appBlockRH, dcBlockRH, dcBlockResultsRH int64) error {
@@ -296,21 +306,15 @@ func fillStore(t *testing.T, height int64, stateStore sm.Store, bs *store.BlockS
 }
 
 func TestSaveRetainHeight(t *testing.T) {
-	state, bs, callbackF, stateStore := makeStateAndBlockStore("TestSaveRetainHeight")
+	state, bs, txIndexer, blockIndexer, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestSaveRetainHeight")
 	defer callbackF()
 	height := int64(10)
 	state.LastBlockHeight = height - 1
 
 	fillStore(t, height, stateStore, bs, state, nil)
+	pruner := sm.NewPruner(stateStore, bs, blockIndexer, txIndexer, log.TestingLogger())
 	err := initStateStoreRetainHeights(stateStore, 0, 0, 0)
 	require.NoError(t, err)
-
-	pruner := sm.NewPruner(
-		stateStore,
-		bs,
-		log.TestingLogger(),
-		sm.WithPrunerCompanionEnabled(),
-	)
 
 	// We should not save a height that is 0
 	err = pruner.SetApplicationBlockRetainHeight(0)
@@ -330,17 +334,11 @@ func TestSaveRetainHeight(t *testing.T) {
 }
 
 func TestMinRetainHeight(t *testing.T) {
-	stateDB := dbm.NewMemDB()
-	stateStore := sm.NewStore(stateDB, sm.StoreOptions{
-		DiscardABCIResponses: false,
-	})
+	_, bs, txIndexer, blockIndexer, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestMinRetainHeight")
+	defer callbackF()
+	pruner := sm.NewPruner(stateStore, bs, blockIndexer, txIndexer, log.TestingLogger(), sm.WithPrunerCompanionEnabled())
+
 	require.NoError(t, initStateStoreRetainHeights(stateStore, 0, 0, 0))
-	pruner := sm.NewPruner(
-		stateStore,
-		nil,
-		log.TestingLogger(),
-		sm.WithPrunerCompanionEnabled(),
-	)
 	minHeight := pruner.FindMinRetainHeight()
 	require.Equal(t, int64(0), minHeight)
 
@@ -356,11 +354,6 @@ func TestMinRetainHeight(t *testing.T) {
 }
 
 func TestABCIResPruningStandalone(t *testing.T) {
-	_, bs, callbackF, stateStore := makeStateAndBlockStore("TestABCIResPruningStandalone")
-	defer callbackF()
-	responses, err := stateStore.LoadFinalizeBlockResponse(1)
-	require.Error(t, err)
-	require.Nil(t, responses)
 
 	response1 := &abci.ResponseFinalizeBlock{
 		TxResults: []*abci.ExecTxResult{
@@ -368,15 +361,18 @@ func TestABCIResPruningStandalone(t *testing.T) {
 		},
 	}
 	response1.AppHash = make([]byte, 1)
+	_, bs, txIndexer, blockIndexer, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestABCIResPruningStandalone")
+	defer callbackF()
 
 	for height := int64(1); height <= 10; height++ {
 		err := stateStore.SaveFinalizeBlockResponse(height, response1)
 		require.NoError(t, err)
 
 	}
-	_, err = stateStore.LoadFinalizeBlockResponse(1)
+	_, err := stateStore.LoadFinalizeBlockResponse(1)
 	require.NoError(t, err)
-	pruner := sm.NewPruner(stateStore, bs, log.TestingLogger())
+
+	pruner := sm.NewPruner(stateStore, bs, blockIndexer, txIndexer, log.TestingLogger())
 
 	retainHeight := int64(2)
 	err = stateStore.SaveABCIResRetainHeight(retainHeight)
@@ -450,7 +446,7 @@ func (o *prunerObserver) PrunerPrunedBlocks(info *sm.BlocksPrunedInfo) {
 func TestFinalizeBlockResponsePruning(t *testing.T) {
 	t.Run("Persisting responses", func(t *testing.T) {
 
-		_, _, callbackF, stateStore := makeStateAndBlockStore("TestFinalizeBlockResponsePruning")
+		_, _, _, _, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestFinalizeBlockResponsePruning")
 		defer callbackF()
 
 		responses, err := stateStore.LoadFinalizeBlockResponse(1)
@@ -463,7 +459,7 @@ func TestFinalizeBlockResponsePruning(t *testing.T) {
 			},
 			AppHash: make([]byte, 1),
 		}
-		state, bs, callbackF, stateStore := makeStateAndBlockStore("TestFinalizeBlockResponsePruning")
+		state, bs, txIndexer, blockIndexer, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestFinalizeBlockResponsePruning")
 		defer callbackF()
 		height := int64(10)
 		state.LastBlockHeight = height - 1
@@ -476,6 +472,8 @@ func TestFinalizeBlockResponsePruning(t *testing.T) {
 		pruner := sm.NewPruner(
 			stateStore,
 			bs,
+			blockIndexer,
+			txIndexer,
 			log.TestingLogger(),
 			sm.WithPrunerInterval(1*time.Second),
 			sm.WithPrunerObserver(obs),
@@ -487,7 +485,6 @@ func TestFinalizeBlockResponsePruning(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, pruner.SetABCIResRetainHeight(height))
 		require.NoError(t, pruner.Start())
-
 		select {
 		case info := <-obs.prunedABCIResInfoCh:
 			require.Equal(t, height-1, info.ToHeight)

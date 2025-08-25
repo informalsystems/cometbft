@@ -441,6 +441,7 @@ func (app *Application) Commit(_ context.Context, _ *abci.RequestCommit) (*abci.
 	if app.cfg.RetainBlocks > 0 {
 		retainHeight = int64(height - app.cfg.RetainBlocks + 1)
 	}
+
 	return &abci.ResponseCommit{
 		RetainHeight: retainHeight,
 	}, nil

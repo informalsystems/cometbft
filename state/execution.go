@@ -328,6 +328,24 @@ func (blockExec *BlockExecutor) applyBlock(state State, blockID types.BlockID, b
 		if err != nil {
 			blockExec.logger.Error("Failed to set application block retain height", "retainHeight", retainHeight, "err", err)
 		}
+		// TODO THIS SHOULD BE REVISITED WHEN MERGED UPSTREAM TO BE USED
+		// WITH A DATA COMPANION. In cometbft main, the ABCI result and
+		// indexer retain heights are set ONLY by the data companion
+		// This changes that assumption. The behavior should be the same but
+		// it should be tested.
+		err = blockExec.pruner.SetABCIResRetainHeight(retainHeight)
+		if err != nil {
+			blockExec.logger.Error("Failed to set ABCI results retain height", "retainHeight", retainHeight, "err", err)
+		}
+		if blockExec.pruner.indexerPruningEnabled {
+			if err := blockExec.pruner.SetBlockIndexerRetainHeight(retainHeight); err != nil {
+				blockExec.logger.Error("Failed to set block indexer  retain height", "retainHeight", retainHeight, "err", err)
+			}
+
+			if err := blockExec.pruner.SetTxIndexerRetainHeight(retainHeight); err != nil {
+				blockExec.logger.Error("Failed to set tx indexer retain height", "retainHeight", retainHeight, "err", err)
+			}
+		}
 	}
 
 	// Events are fired after everything else.

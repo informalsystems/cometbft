@@ -387,6 +387,8 @@ func NewNodeWithContext(ctx context.Context,
 
 	pruner, err := createPruner(
 		config,
+		txIndexer,
+		blockIndexer,
 		stateStore,
 		blockStore,
 		smMetrics,
@@ -998,6 +1000,8 @@ func makeNodeInfo(
 
 func createPruner(
 	config *cfg.Config,
+	txIndexer txindex.TxIndexer,
+	blockIndexer indexer.BlockIndexer,
 	stateStore sm.Store,
 	blockStore *store.BlockStore,
 	metrics *sm.Metrics,
@@ -1023,8 +1027,17 @@ func createPruner(
 		}
 		prunerOpts = append(prunerOpts, sm.WithPrunerCompanionEnabled())
 	}
+	if config.Storage.Pruning.IndexerPruningEnabled {
+		prunerOpts = append(prunerOpts, sm.WithIndexerPruning(true))
+	}
 
-	return sm.NewPruner(stateStore, blockStore, logger, prunerOpts...), nil
+	pruner := sm.NewPruner(stateStore, blockStore, blockIndexer, txIndexer, logger, prunerOpts...)
+	var err error
+	if config.Storage.Pruning.IndexerPruningEnabled {
+		err = initIndexerRetentionHeights(pruner)
+	}
+
+	return pruner, err
 }
 
 // Set the initial application retain height to 0 to avoid the data companion
@@ -1033,9 +1046,51 @@ func createPruner(
 func initApplicationRetainHeight(stateStore sm.Store) error {
 	if _, err := stateStore.GetApplicationRetainHeight(); err != nil {
 		if errors.Is(err, sm.ErrKeyNotFound) {
-			return stateStore.SaveApplicationRetainHeight(0)
+			err = stateStore.SaveApplicationRetainHeight(0)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
 		}
-		return err
+	}
+
+	// ONLY FOR POLYGON'S FORK
+	if _, err := stateStore.GetABCIResRetainHeight(); err != nil {
+		if errors.Is(err, sm.ErrKeyNotFound) {
+			err = stateStore.SaveABCIResRetainHeight(0)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+// ONLY FOR POLYGON's FORK AS HERE THE APPLICATION PRUNES
+// THE INDEXER AND ABCI RESULTS AS WELL
+func initIndexerRetentionHeights(p *sm.Pruner) error {
+	if _, err := p.GetBlockIndexerRetainHeight(); err != nil {
+		if errors.Is(err, sm.ErrKeyNotFound) {
+			err = p.SetBlockIndexerRetainHeight(0)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	if _, err := p.GetTxIndexerRetainHeight(); err != nil {
+		if errors.Is(err, sm.ErrKeyNotFound) {
+			err = p.SetTxIndexerRetainHeight(0)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	return nil
 }
