@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	abci "github.com/cometbft/cometbft/abci/types"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/indexer/block"
@@ -742,6 +743,121 @@ func TestPruningService(t *testing.T) {
 
 	case <-time.After(5 * time.Second):
 		require.Fail(t, "timed out waiting for pruning run to complete")
+	}
+}
+func makeAndSaveStates(t *testing.T, fromHeight int64, toHeight int64, stateStore sm.Store) {
+
+	finalizeBlockResults := &abci.ResponseFinalizeBlock{
+		TxResults: []*abci.ExecTxResult{
+			{Data: []byte{1}},
+			{Data: []byte{2}},
+			{Data: []byte{3}},
+		},
+		AppHash: make([]byte, 1),
+	}
+
+	validatorSet := genValSet(1)
+
+	valsChanged := int64(0)
+	paramsChanged := int64(0)
+
+	for h := fromHeight; h <= toHeight; h++ {
+		if valsChanged == 0 || h%10 == 2 {
+			valsChanged = h + 1 // Have to add 1, since NextValidators is what's stored
+		}
+		if paramsChanged == 0 || h%10 == 5 {
+			paramsChanged = h
+		}
+
+		state := sm.State{
+			InitialHeight:   1,
+			LastBlockHeight: h - 1,
+			Validators:      validatorSet,
+			NextValidators:  validatorSet,
+			ConsensusParams: types.ConsensusParams{
+				Block: types.BlockParams{MaxBytes: 10e6},
+			},
+			LastHeightValidatorsChanged:      valsChanged,
+			LastHeightConsensusParamsChanged: paramsChanged,
+		}
+
+		if state.LastBlockHeight >= 1 {
+			state.LastValidators = state.Validators
+		}
+
+		state.LastBlockTime = time.Date(2020, 1, 1, 1, 0, 0, 0, time.UTC)
+
+		state.ConsensusParams.Evidence.MaxAgeNumBlocks = 0
+		state.ConsensusParams.Evidence.MaxAgeDuration = 1 * time.Microsecond
+
+		err := stateStore.Save(state)
+		require.NoError(t, err)
+
+		err = stateStore.SaveFinalizeBlockResponse(h, finalizeBlockResults)
+		require.NoError(t, err)
+	}
+}
+
+func TestPruneMaxBatchSize(t *testing.T) {
+	testcases := map[string]struct {
+		makeHeights             int64
+		pruneFrom               int64
+		pruneTo                 int64
+		retainHeightAfter1Batch int64
+		expectErr               bool
+		pruneMaxBlocks          int64
+	}{
+		"no error when prunning everything": {100, 1, 100, 100, false, 100},
+		"prune only 5 blocks":               {100, 1, 100, 5, false, 5},
+	}
+
+	for name, tc := range testcases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			state, blockStore, txIndexer, blockIndexer, callbackF, stateStore := makeStateAndBlockStoreAndIndexers("TestPruneStates_" + name)
+			defer callbackF()
+
+			saveBlocks(blockStore, state, stateStore, 1, 100, false)
+			makeAndSaveStates(t, 1, tc.makeHeights, stateStore)
+			// Test assertions
+			err := initStateStoreRetainHeights(stateStore, 0, 0, 0)
+			require.NoError(t, err)
+			obs := newPrunerObserver(1)
+
+			pruner := sm.NewPruner(
+				stateStore,
+				blockStore,
+				blockIndexer,
+				txIndexer,
+				log.TestingLogger(),
+				sm.WithPrunerInterval(time.Second*1),
+				sm.WithPrunerObserver(obs),
+				sm.WithPrunerMaxBatchSize(tc.pruneMaxBlocks),
+			)
+			err = pruner.SetApplicationBlockRetainHeight(tc.pruneTo)
+			require.NoError(t, err)
+			pruner.Start()
+			select {
+			case info := <-obs.prunedBlocksResInfoCh:
+				//require.Equal(t, tc.pruneFrom, info.FromHeight)
+				require.Equal(t, tc.pruneFrom+tc.pruneMaxBlocks-1, info.ToHeight+1)
+				pruner.Stop()
+
+				for h := tc.pruneMaxBlocks; h < tc.makeHeights; h++ {
+					_, err := stateStore.LoadValidators(h)
+					require.NoError(t, err)
+					_, err = stateStore.LoadConsensusParams(h)
+					require.NoError(t, err)
+					_, err = stateStore.LoadFinalizeBlockResponse(h)
+					require.NoError(t, err)
+				}
+				break
+			case <-time.After(5 * time.Second):
+				require.Fail(t, "timed out waiting for pruning run to complete")
+				break
+			}
+
+		})
 	}
 }
 

@@ -1329,7 +1329,7 @@ type PruningConfig struct {
 	// The time period between automated background pruning operations.
 	Interval time.Duration `mapstructure:"interval"`
 	// This is the maximum number of blocks deleted in one batch.
-	MaxPruningBatchSize int `mapstructure:"max_pruning_batch_size"`
+	MaxPruningBatchSize int64 `mapstructure:"max_pruning_batch_size"`
 	// Data companion-related pruning configuration.
 	DataCompanion         *DataCompanionPruningConfig `mapstructure:"data_companion"`
 	IndexerPruningEnabled bool                        `mapstructure:"indexer_pruning_enabled"`

@@ -137,6 +137,7 @@ func makeAndSaveStates(t *testing.T, fromHeight int64, toHeight int64, stateStor
 		require.NoError(t, err)
 	}
 }
+
 func TestPruneStates(t *testing.T) {
 	testcases := map[string]struct {
 		makeHeights             int64

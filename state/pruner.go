@@ -2,6 +2,7 @@ package state
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -85,9 +86,9 @@ func WithPrunerInterval(t time.Duration) PrunerOption {
 }
 
 // WithPrunerMaxBatchSize sets the maximum number of blocks to delete in one
-func WithPrunerMaxBatchSize(size int) PrunerOption {
+func WithPrunerMaxBatchSize(size int64) PrunerOption {
 	return func(p *prunerConfig) {
-		p.maxBatchSize = int64(size)
+		p.maxBatchSize = size
 	}
 }
 
@@ -465,6 +466,10 @@ func (p *Pruner) pruneBlocksToRetainHeight(lastRetainHeight int64) int64 {
 		return lastRetainHeight
 	}
 	tStart := time.Now()
+	if targetRetainHeight > lastRetainHeight+p.maxBatchSize {
+		targetRetainHeight = lastRetainHeight + p.maxBatchSize
+	}
+	fmt.Println("Target retain height", targetRetainHeight, "last retain height", lastRetainHeight, "max batch size", p.maxBatchSize)
 	pruned, evRetainHeight, err := p.pruneBlocksToHeight(targetRetainHeight)
 	elapsed := time.Since(tStart)
 	p.logger.Info("block pruning time", "elapsed", elapsed.String(), "pruned", pruned, "evidenceRetainHeight", evRetainHeight)
