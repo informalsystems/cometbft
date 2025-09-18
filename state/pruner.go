@@ -507,6 +507,11 @@ func (p *Pruner) pruneABCIResToRetainHeight(lastRetainHeight int64) int64 {
 		return lastRetainHeight
 	}
 
+	if lastRetainHeight+p.maxBatchSize < targetRetainHeight {
+		targetRetainHeight = lastRetainHeight + p.maxBatchSize
+	}
+
+	// If the application has set the DiscardABCIResponses flag to true, we
 	// If the block retain height is 0, pruning of the block and state stores might be disabled
 	// This should not prevent Comet from pruning ABCI results if needed.
 	// We could by default always compact when pruning the responses, but in case the state store
