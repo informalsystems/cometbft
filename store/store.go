@@ -396,7 +396,6 @@ func (bs *BlockStore) PruneBlocks(height int64, state sm.State) (uint64, int64, 
 
 	evidencePoint := height
 	for h := base; h < height; h++ {
-		fmt.Println("Pruning block at height", h)
 		meta := bs.LoadBlockMeta(h)
 		if meta == nil { // assume already deleted
 			continue
