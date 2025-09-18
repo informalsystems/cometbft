@@ -541,6 +541,12 @@ compaction_interval = 1000
 # The time period between automated background pruning operations.
 interval = "{{ .Storage.Pruning.Interval }}"
 
+# The maximum number of blocks to delete in one pruning operation.
+# Deleting too many blocks at once can lead to high disk I/O and CPU usage,
+# which can impact node performance. Adjust this value based on your system's
+# capabilities and performance requirements.
+max_pruning_batch_size = {{ .Storage.Pruning.MaxPruningBatchSize }}
+
 # Indexer pruning enabling. Note that this has not been tested in production
 # It should be enabled on full nodes to confirm it is not impacting performance. 
 indexer_pruning_enabled = {{ .Storage.Pruning.IndexerPruningEnabled }}
