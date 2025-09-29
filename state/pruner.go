@@ -384,18 +384,22 @@ func (p *Pruner) pruneIndexesRoutine() {
 	}
 }
 
+func (p *Pruner) parseError(err error, indexerType string, lastRetainHeight int64) int64 {
+	// Indexer retain height has not yet been set - do not log any
+	// errors at this time.
+	if errors.Is(err, ErrKeyNotFound) {
+		return 0
+	}
+	p.logger.Error("Failed to get "+indexerType+" retain height", "err", err)
+	return lastRetainHeight
+}
+
 func (p *Pruner) pruneTxIndexerToRetainHeight(lastRetainHeight int64) int64 {
 
 	targetRetainHeight, err := p.GetTxIndexerRetainHeight()
 	p.logger.Info("txIndex pruning started", "currentHeight", lastRetainHeight, "targetRetainHeight", targetRetainHeight)
 	if err != nil {
-		// Indexer retain height has not yet been set - do not log any
-		// errors at this time.
-		if errors.Is(err, ErrKeyNotFound) {
-			return 0
-		}
-		p.logger.Error("Failed to get Indexer retain height", "err", err)
-		return lastRetainHeight
+		return p.parseError(err, "txindexer", lastRetainHeight)
 	}
 
 	if lastRetainHeight >= targetRetainHeight {
@@ -420,13 +424,7 @@ func (p *Pruner) pruneBlockIndexerToRetainHeight(lastRetainHeight int64) int64 {
 	targetRetainHeight, err := p.GetBlockIndexerRetainHeight()
 	p.logger.Info("block pruning started", "currentHeight", lastRetainHeight, "targetRetainHeight", targetRetainHeight)
 	if err != nil {
-		// Indexer retain height has not yet been set - do not log any
-		// errors at this time.
-		if errors.Is(err, ErrKeyNotFound) {
-			return 0
-		}
-		p.logger.Error("Failed to get Indexer retain height", "err", err)
-		return lastRetainHeight
+		return p.parseError(err, "blockIndexer", lastRetainHeight)
 	}
 
 	if lastRetainHeight >= targetRetainHeight {
