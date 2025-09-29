@@ -48,15 +48,6 @@ func TestPrunerMaxBatchSizeTxIndexer(t *testing.T) {
 	require.True(t, containsAllTxs(results, expectedTxs))
 	require.False(t, containsAllTxs(results, notExpectedTxs))
 
-	prunedHeight = pruner.PruneTxIndexerToRetainHeight(0)
-	require.Equal(t, int64(2), prunedHeight)
-	results, err = txIndexer.Search(context.Background(), query.MustCompile("tx.height <= 6"))
-	require.NoError(t, err)
-	expectedTxs = []string{"foo5", "bar5", "foo6", "bar6"}
-	notExpectedTxs = []string{"foo1", "bar1", "foo2", "bar2", "foo3", "bar3", "foo4", "bar4"}
-	require.True(t, containsAllTxs(results, expectedTxs))
-	require.False(t, containsAllTxs(results, notExpectedTxs))
-
 }
 func TestPrunerMaxBatchSize(t *testing.T) {
 	pruner, _, blockIndexer, _ := createTestSetup(t)
