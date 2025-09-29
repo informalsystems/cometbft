@@ -20,60 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPrunerMaxBatchSizeTxIndexer(t *testing.T) {
-	pruner, txIndexer, _, _ := createTestSetup(t)
-
-	// Fill the tx indexer with tx results up to height 6
-	for height := int64(1); height <= 6; height++ {
-		_, txResult1, txResult2 := getEventsAndResults(height)
-		err := txIndexer.Index(txResult1)
-		require.NoError(t, err)
-		err = txIndexer.Index(txResult2)
-		require.NoError(t, err)
-	}
-
-	// Set the target retain height to 4
-	err := pruner.SetTxIndexerRetainHeight(4)
-	require.NoError(t, err)
-
-	// Prune to the retain height (should prune in batches of 2)
-	prunedHeight := pruner.PruneTxIndexerToRetainHeight(0)
-	require.Equal(t, int64(2), prunedHeight)
-
-	// Only txs from heights 4, 5, 6 should remain
-	results, err := txIndexer.Search(context.Background(), query.MustCompile("tx.height <= 6"))
-	require.NoError(t, err)
-	expectedTxs := []string{"foo3", "bar3", "foo4", "bar4", "foo5", "bar5", "foo6", "bar6"}
-	notExpectedTxs := []string{"foo1", "bar1", "foo2", "bar2"}
-	require.True(t, containsAllTxs(results, expectedTxs))
-	require.False(t, containsAllTxs(results, notExpectedTxs))
-
-}
-func TestPrunerMaxBatchSize(t *testing.T) {
-	pruner, _, blockIndexer, _ := createTestSetup(t)
-
-	// Fill the block indexer with events up to height 6
-	for height := int64(1); height <= 6; height++ {
-		events, _, _ := getEventsAndResults(height)
-		err := blockIndexer.Index(events)
-		require.NoError(t, err)
-	}
-
-	// Set the target retain height to 4
-	err := pruner.SetBlockIndexerRetainHeight(4)
-	require.NoError(t, err)
-
-	// Prune to the retain height (should prune in batches of 2)
-	prunedHeight := pruner.PruneBlockIndexerToRetainHeight(0)
-	require.Equal(t, int64(2), prunedHeight)
-
-	// Only heights 4, 5, 6 should remain
-	heights, err := blockIndexer.Search(context.Background(), query.MustCompile("block.height <= 6"))
-	require.NoError(t, err)
-	require.Equal(t, []int64{2, 3, 4, 5, 6}, heights)
-
-}
-
 func TestPruneBlockIndexerToRetainHeight(t *testing.T) {
 	pruner, _, blockIndexer, _ := createTestSetup(t)
 
@@ -239,7 +185,7 @@ func createTestSetup(t *testing.T) (*sm.Pruner, *kv.TxIndex, blockidxkv.BlockerI
 		DiscardABCIResponses: false,
 	})
 	bs := store.NewBlockStore(blockDB)
-	pruner := sm.NewPruner(stateStore, bs, blockIndexer, txIndexer, log.TestingLogger(), sm.WithPrunerMaxBatchSize(2))
+	pruner := sm.NewPruner(stateStore, bs, blockIndexer, txIndexer, log.TestingLogger())
 
 	return pruner, txIndexer, *blockIndexer, eventBus
 }

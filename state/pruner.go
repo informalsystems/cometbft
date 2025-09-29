@@ -399,7 +399,6 @@ func (p *Pruner) pruneIndexesRoutine() {
 func (p *Pruner) pruneTxIndexerToRetainHeight(lastRetainHeight int64) int64 {
 
 	targetRetainHeight, err := p.GetTxIndexerRetainHeight()
-
 	p.logger.Info("txIndex pruning started", "currentHeight", lastRetainHeight, "targetRetainHeight", targetRetainHeight)
 	if err != nil {
 		// Indexer retain height has not yet been set - do not log any
@@ -415,9 +414,6 @@ func (p *Pruner) pruneTxIndexerToRetainHeight(lastRetainHeight int64) int64 {
 		return lastRetainHeight
 	}
 
-	if lastRetainHeight+p.maxBatchSize < targetRetainHeight {
-		targetRetainHeight = lastRetainHeight + p.maxBatchSize
-	}
 	tStart := time.Now()
 	numPrunedTxIndexer, newTxIndexerRetainHeight, err := p.txIndexer.Prune(targetRetainHeight)
 	tElapsed := time.Since(tStart)
@@ -448,9 +444,7 @@ func (p *Pruner) pruneBlockIndexerToRetainHeight(lastRetainHeight int64) int64 {
 	if lastRetainHeight >= targetRetainHeight {
 		return lastRetainHeight
 	}
-	if lastRetainHeight+p.maxBatchSize < targetRetainHeight {
-		targetRetainHeight = lastRetainHeight + p.maxBatchSize
-	}
+
 	tStart := time.Now()
 	numPrunedBlockIndexer, newBlockIndexerRetainHeight, err := p.blockIndexer.Prune(targetRetainHeight)
 	tElapsed := time.Since(tStart)

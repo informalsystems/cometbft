@@ -852,7 +852,6 @@ func TestPruneMaxBatchSize(t *testing.T) {
 					require.NoError(t, err)
 				}
 				break
-
 			case <-time.After(5 * time.Second):
 				require.Fail(t, "timed out waiting for pruning run to complete")
 				break
