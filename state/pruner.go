@@ -405,7 +405,7 @@ func (p *Pruner) pruneTxIndexerToRetainHeight(lastRetainHeight int64) int64 {
 	tStart := time.Now()
 	numPrunedTxIndexer, newTxIndexerRetainHeight, err := p.txIndexer.Prune(targetRetainHeight)
 	tElapsed := time.Since(tStart)
-	p.logger.Info("txIndex pruning time", "elapsed", tElapsed.String(), "numPruned", numPrunedTxIndexer, "newTxIndexerRetainHeight", newTxIndexerRetainHeight)
+	p.logger.Info("txIndex pruning time", "elapsed", tElapsed.String(), "pruned", numPrunedTxIndexer, "newTxIndexerRetainHeight", newTxIndexerRetainHeight)
 	if err != nil {
 		p.logger.Error("Failed to prune tx indexer", "err", err, "targetRetainHeight", targetRetainHeight, "newTxIndexerRetainHeight", newTxIndexerRetainHeight)
 	} else if numPrunedTxIndexer > 0 {
@@ -436,7 +436,7 @@ func (p *Pruner) pruneBlockIndexerToRetainHeight(lastRetainHeight int64) int64 {
 	tStart := time.Now()
 	numPrunedBlockIndexer, newBlockIndexerRetainHeight, err := p.blockIndexer.Prune(targetRetainHeight)
 	tElapsed := time.Since(tStart)
-	p.logger.Info("block pruning time", "elapsed", tElapsed.String(), "numPruned", numPrunedBlockIndexer, "newBlockIndexerRetainHeight", newBlockIndexerRetainHeight)
+	p.logger.Info("block pruning time", "elapsed", tElapsed.String(), "pruned", numPrunedBlockIndexer, "newBlockIndexerRetainHeight", newBlockIndexerRetainHeight)
 	if err != nil {
 		p.logger.Error("Failed to prune block indexer", "err", err, "targetRetainHeight", targetRetainHeight, "newBlockIndexerRetainHeight", newBlockIndexerRetainHeight)
 	} else if numPrunedBlockIndexer > 0 {
@@ -497,7 +497,7 @@ func (p *Pruner) pruneABCIResToRetainHeight(lastRetainHeight int64) int64 {
 	tStart := time.Now()
 	numPruned, newRetainHeight, err := p.stateStore.PruneABCIResponses(targetRetainHeight, forceCompact)
 	tElapsed := time.Since(tStart)
-	p.logger.Info("abcires pruning time", "elapsed", tElapsed.String(), "numPruned", numPruned, "newRetainHeight", newRetainHeight)
+	p.logger.Info("abcires pruning time", "elapsed", tElapsed.String(), "pruned", numPruned, "newRetainHeight", newRetainHeight)
 	if err != nil {
 		p.logger.Error("Failed to prune ABCI responses", "err", err, "targetRetainHeight", targetRetainHeight)
 		return lastRetainHeight
