@@ -1014,7 +1014,6 @@ func createPruner(
 	prunerOpts := []sm.PrunerOption{
 		sm.WithPrunerInterval(config.Storage.Pruning.Interval),
 		sm.WithPrunerMetrics(metrics),
-		sm.WithPrunerMaxBatchSize(config.Storage.Pruning.MaxPruningBatchSize),
 	}
 
 	if config.Storage.Pruning.DataCompanion.Enabled {

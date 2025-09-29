@@ -36,7 +36,6 @@ type Pruner struct {
 	blockIndexer indexer.BlockIndexer
 	txIndexer    txindex.TxIndexer
 	interval     time.Duration
-	maxBatchSize int64
 	observer     PrunerObserver
 	metrics      *Metrics
 
@@ -50,7 +49,6 @@ type Pruner struct {
 type prunerConfig struct {
 	dcEnabled             bool
 	interval              time.Duration
-	maxBatchSize          int64
 	observer              PrunerObserver
 	metrics               *Metrics
 	indexerPruningEnabled bool
@@ -58,11 +56,10 @@ type prunerConfig struct {
 
 func defaultPrunerConfig() *prunerConfig {
 	return &prunerConfig{
-		dcEnabled:    false,
-		interval:     config.DefaultPruningInterval,
-		maxBatchSize: config.DefaultMaxPruningBatchSize,
-		observer:     &NoopPrunerObserver{},
-		metrics:      NopMetrics(),
+		dcEnabled: false,
+		interval:  config.DefaultPruningInterval,
+		observer:  &NoopPrunerObserver{},
+		metrics:   NopMetrics(),
 	}
 }
 
@@ -82,13 +79,6 @@ func WithPrunerCompanionEnabled() PrunerOption {
 // pruner.
 func WithPrunerInterval(t time.Duration) PrunerOption {
 	return func(p *prunerConfig) { p.interval = t }
-}
-
-// WithPrunerMaxBatchSize sets the maximum number of blocks to delete in one
-func WithPrunerMaxBatchSize(size int) PrunerOption {
-	return func(p *prunerConfig) {
-		p.maxBatchSize = int64(size)
-	}
 }
 
 func WithPrunerObserver(obs PrunerObserver) PrunerOption {
@@ -131,7 +121,6 @@ func NewPruner(
 		stateStore:            stateStore,
 		logger:                logger,
 		interval:              cfg.interval,
-		maxBatchSize:          cfg.maxBatchSize,
 		observer:              cfg.observer,
 		metrics:               cfg.metrics,
 		dcEnabled:             cfg.dcEnabled,

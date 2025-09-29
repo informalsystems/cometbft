@@ -40,10 +40,9 @@ const (
 	DefaultNodeKeyName  = "node_key.json"
 	DefaultAddrBookName = "addrbook.json"
 
-	MempoolTypeFlood           = "flood"
-	MempoolTypeNop             = "nop"
-	DefaultPruningInterval     = 10 * time.Second
-	DefaultMaxPruningBatchSize = 1000
+	MempoolTypeFlood       = "flood"
+	MempoolTypeNop         = "nop"
+	DefaultPruningInterval = 10 * time.Second
 )
 
 // NOTE: Most of the structs & relevant comments + the
@@ -1328,8 +1327,6 @@ func getDefaultMoniker() string {
 type PruningConfig struct {
 	// The time period between automated background pruning operations.
 	Interval time.Duration `mapstructure:"interval"`
-	// This is the maximum number of blocks deleted in one batch.
-	MaxPruningBatchSize int `mapstructure:"max_pruning_batch_size"`
 	// Data companion-related pruning configuration.
 	DataCompanion         *DataCompanionPruningConfig `mapstructure:"data_companion"`
 	IndexerPruningEnabled bool                        `mapstructure:"indexer_pruning_enabled"`
@@ -1338,7 +1335,6 @@ type PruningConfig struct {
 func DefaultPruningConfig() *PruningConfig {
 	return &PruningConfig{
 		Interval:              DefaultPruningInterval,
-		MaxPruningBatchSize:   DefaultMaxPruningBatchSize,
 		DataCompanion:         DefaultDataCompanionPruningConfig(),
 		IndexerPruningEnabled: false,
 	}
@@ -1347,7 +1343,6 @@ func DefaultPruningConfig() *PruningConfig {
 func TestPruningConfig() *PruningConfig {
 	return &PruningConfig{
 		Interval:              DefaultPruningInterval,
-		MaxPruningBatchSize:   DefaultMaxPruningBatchSize,
 		DataCompanion:         TestDataCompanionPruningConfig(),
 		IndexerPruningEnabled: true,
 	}
@@ -1356,9 +1351,6 @@ func TestPruningConfig() *PruningConfig {
 func (cfg *PruningConfig) ValidateBasic() error {
 	if cfg.Interval <= 0 {
 		return errors.New("interval must be > 0")
-	}
-	if cfg.MaxPruningBatchSize <= 0 {
-		return errors.New("max_pruning_batch_size must be > 0")
 	}
 	if err := cfg.DataCompanion.ValidateBasic(); err != nil {
 		return fmt.Errorf("error in [data_companion] section: %w", err)
